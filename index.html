@@ -808,7 +808,13 @@ async function getRepoTree(){
 async function searchFilenames(query){
   const{tree,truncated}=await getRepoTree();
   const q=query.toLowerCase();
-  const matches=tree.filter(item=>item.type==='blob'&&item.path.toLowerCase().includes(q));
+  // Match filename only (last path segment), not full path.
+  // This prevents folder name matches from including all files inside.
+  const matches=tree.filter(item=>{
+    if(item.type!=='blob')return false;
+    const fileName=item.path.split('/').pop().toLowerCase();
+    return fileName.includes(q);
+  });
   return{items:matches.slice(0,100),total:matches.length,truncated};
 }
 
