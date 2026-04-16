@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#0f172a">
-<title>Claude Agent Viewer</title>
+<title>GitHub Repo Viewer</title>
 <link rel="manifest" href="manifest.json">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📂</text></svg>">
 <style>
@@ -226,21 +226,21 @@ header h1 span{color:var(--accent)}
 
   <div id="auth-screen" class="hidden">
     <div class="auth-box">
-      <div class="logo">🔐</div>
-      <h2>Claude Agent Viewer</h2>
-      <p class="subtitle">プライベートリポジトリの成果物をスマホから閲覧</p>
+      <div class="logo">📂</div>
+      <h2>GitHub Repo Viewer</h2>
+      <p class="subtitle">GitHubリポジトリの中身をスマホから素早く閲覧</p>
 
       <div class="input-group">
         <label>Owner</label>
-        <input type="text" id="owner-input" value="marutoto-1010">
+        <input type="text" id="owner-input" placeholder="例: your-username">
       </div>
       <div class="input-group">
         <label>Repository</label>
-        <input type="text" id="repo-input" value="claude-agent">
+        <input type="text" id="repo-input" placeholder="例: my-notes">
       </div>
       <div class="input-group">
         <label>Branch</label>
-        <input type="text" id="branch-input" value="master">
+        <input type="text" id="branch-input" placeholder="例: main">
       </div>
       <div class="input-group">
         <label>GitHub Token (必須)</label>
@@ -296,7 +296,7 @@ return{parse}})();
 
 // === State ===
 const state={
-  owner:'marutoto-1010',repo:'claude-agent',branch:'master',token:'',
+  owner:'',repo:'',branch:'main',token:'',
   path:'',cache:{},searchQuery:'',history:[],
   currentTab:'browse',favorites:[],
   currentFile:null,searchScope:'all',searchTimer:null
@@ -344,11 +344,12 @@ function showAuthScreen(){
 function hideAuthScreen(){authScreen.classList.add('hidden')}
 
 async function testAndSave(){
-  const owner=$('owner-input').value.trim()||'marutoto-1010';
-  const repo=$('repo-input').value.trim()||'claude-agent';
-  const branch=$('branch-input').value.trim()||'master';
+  const owner=$('owner-input').value.trim();
+  const repo=$('repo-input').value.trim();
+  const branch=$('branch-input').value.trim()||'main';
   const token=$('token-input').value.trim();
 
+  if(!owner||!repo){connStatus.innerHTML='<span class="status-err">Owner と Repository を入力してください</span>';return}
   if(!token){connStatus.innerHTML='<span class="status-err">トークンを入力してください（privateリポには必須）</span>';return}
 
   connStatus.innerHTML='<span class="status-testing">接続テスト中...</span>';

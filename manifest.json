@@ -1,7 +1,7 @@
 {
-  "name": "Claude Agent Viewer",
-  "short_name": "Agent Viewer",
-  "description": "Claude Codeの成果物をモバイルから閲覧",
+  "name": "GitHub Repo Viewer",
+  "short_name": "Repo Viewer",
+  "description": "GitHubリポジトリをモバイルから閲覧できるPWA",
   "start_url": "./index.html",
   "display": "standalone",
   "background_color": "#0f172a",
