@@ -66,10 +66,11 @@ header h1 span{color:var(--accent)}
 .file-info{flex:1;min-width:0}
 .file-name{font-size:15px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .file-meta{font-size:12px;color:var(--text3);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.file-actions{display:flex;gap:8px;flex-shrink:0;align-items:center}
+.file-actions{display:flex;gap:4px;flex-shrink:0;align-items:center}
 .file-arrow{color:var(--text3);font-size:14px;flex-shrink:0}
-.fav-btn{background:none;border:none;font-size:18px;cursor:pointer;padding:4px;opacity:.4;transition:opacity .2s}
-.fav-btn.active{opacity:1}
+.fav-btn{background:var(--bg2);border:1px solid var(--border);font-size:18px;cursor:pointer;padding:6px 10px;border-radius:8px;color:var(--text3);transition:all .15s;min-width:40px;line-height:1}
+.fav-btn:active{transform:scale(.9)}
+.fav-btn.active{background:rgba(251,191,36,.15);border-color:#fbbf24;color:#fbbf24}
 
 /* Recent commit items */
 .commit-item{padding:12px 16px;border-bottom:1px solid var(--border)}
@@ -141,9 +142,13 @@ header h1 span{color:var(--accent)}
 .empty-state .icon{font-size:48px;margin-bottom:12px}
 .empty-state p{font-size:14px;line-height:1.6}
 
-/* Back button in viewer */
-#back-btn{position:sticky;top:0;background:var(--bg);border-bottom:1px solid var(--border);padding:10px 16px;display:none;align-items:center;gap:8px;cursor:pointer;font-size:14px;color:var(--accent);z-index:5;-webkit-user-select:none}
+/* Back/viewer toolbar */
+#viewer-toolbar{position:sticky;top:0;background:var(--bg);border-bottom:1px solid var(--border);display:none;align-items:center;justify-content:space-between;padding:6px 8px;z-index:5;-webkit-user-select:none}
+#back-btn{display:flex;align-items:center;gap:4px;cursor:pointer;font-size:14px;color:var(--accent);padding:8px 12px;border-radius:8px;background:none;border:none}
 #back-btn:active{background:var(--bg2)}
+#fav-toggle{background:none;border:none;font-size:22px;cursor:pointer;padding:6px 12px;border-radius:8px;transition:transform .2s}
+#fav-toggle:active{transform:scale(.85)}
+#fav-toggle.active{color:#fbbf24;text-shadow:0 0 8px rgba(251,191,36,.4)}
 
 /* File type badges */
 .badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;text-transform:uppercase}
@@ -162,6 +167,16 @@ header h1 span{color:var(--accent)}
 /* Toast */
 #toast{position:fixed;bottom:calc(80px + var(--safe-bottom));left:50%;transform:translateX(-50%) translateY(100px);background:var(--bg3);color:var(--text);padding:10px 20px;border-radius:20px;font-size:13px;z-index:50;transition:transform .3s ease;pointer-events:none}
 #toast.show{transform:translateX(-50%) translateY(0)}
+
+/* Search results */
+.search-section{padding:4px 0}
+.search-header{padding:12px 16px 6px;font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px;display:flex;align-items:center;gap:6px}
+.search-header .count{background:var(--bg3);padding:2px 8px;border-radius:10px;font-size:11px}
+.search-snippet{font-size:12px;color:var(--text3);margin-top:6px;padding:6px 10px;background:var(--bg2);border-radius:6px;border-left:2px solid var(--accent);font-family:'SF Mono',Monaco,Consolas,monospace;line-height:1.5;white-space:pre-wrap;overflow:hidden;max-height:60px;text-overflow:ellipsis}
+.search-snippet mark{background:rgba(251,191,36,.35);color:var(--text);padding:0 2px;border-radius:3px}
+.search-scope{display:flex;gap:8px;padding:8px 16px;background:var(--bg);border-bottom:1px solid var(--border);font-size:12px;color:var(--text3);flex-shrink:0;align-items:center}
+.scope-chip{padding:4px 10px;border-radius:12px;border:1px solid var(--border);background:var(--bg2);cursor:pointer;transition:all .15s}
+.scope-chip.active{border-color:var(--accent);background:rgba(99,102,241,.15);color:var(--accent)}
 </style>
 </head>
 <body>
@@ -181,7 +196,12 @@ header h1 span{color:var(--accent)}
     <div id="breadcrumb"></div>
     <div id="search-bar">
       <span id="search-icon">🔍</span>
-      <input type="search" id="search-input" placeholder="ファイル名で検索..." autocomplete="off">
+      <input type="search" id="search-input" placeholder="ファイル名・本文を検索..." autocomplete="off">
+    </div>
+    <div id="search-scope" class="search-scope" style="display:none">
+      <span>スコープ:</span>
+      <span class="scope-chip active" data-scope="all" onclick="setSearchScope('all')">リポジトリ全体</span>
+      <span class="scope-chip" data-scope="current" onclick="setSearchScope('current')">現在のフォルダ</span>
     </div>
   </div>
 
@@ -191,11 +211,15 @@ header h1 span{color:var(--accent)}
     <div id="recent-list" style="display:none"></div>
     <div id="favorites-list" style="display:none"></div>
     <div id="viewer" style="display:none">
-      <div id="back-btn">← 戻る</div>
+      <div id="viewer-toolbar">
+        <button id="back-btn">← 戻る</button>
+        <button id="fav-toggle" title="お気に入り">☆</button>
+      </div>
       <div id="md-viewer"></div>
       <iframe id="html-frame" style="display:none" sandbox="allow-scripts allow-same-origin"></iframe>
       <div id="binary-viewer" style="display:none"></div>
     </div>
+    <div id="search-results" style="display:none"></div>
   </div>
 
   <button id="settings-btn" title="設定" onclick="showAuthScreen()">⚙</button>
@@ -274,7 +298,8 @@ return{parse}})();
 const state={
   owner:'marutoto-1010',repo:'claude-agent',branch:'master',token:'',
   path:'',cache:{},searchQuery:'',history:[],
-  currentTab:'browse',favorites:[]
+  currentTab:'browse',favorites:[],
+  currentFile:null,searchScope:'all',searchTimer:null
 };
 
 // === DOM helpers ===
@@ -283,6 +308,8 @@ const fileList=$('file-list');const viewer=$('viewer');const mdViewer=$('md-view
 const htmlFrame=$('html-frame');const binaryViewer=$('binary-viewer');
 const breadcrumb=$('breadcrumb');const loading=$('loading');
 const searchInput=$('search-input');const backBtn=$('back-btn');
+const viewerToolbar=$('viewer-toolbar');const favToggle=$('fav-toggle');
+const searchResults=$('search-results');const searchScopeEl=$('search-scope');
 const authScreen=$('auth-screen');const connStatus=$('conn-status');
 
 // === Toast ===
@@ -444,8 +471,21 @@ function toggleFavorite(path,e){
   if(idx>=0)state.favorites.splice(idx,1);else state.favorites.push(path);
   saveFavorites();
   toast(idx>=0?'お気に入りから削除':'お気に入りに追加');
+  // Update UI: fav button in viewer toolbar
+  if(state.currentFile===path)updateFavToggle();
+  // Refresh lists
   if(state.currentTab==='favorites')showFavorites();
+  // Refresh current file list icons
+  const key=`contents:${state.path}`;
+  if(state.cache[key]&&Array.isArray(state.cache[key])&&fileList.style.display!=='none')showFileList(state.cache[key]);
 }
+function updateFavToggle(){
+  if(!state.currentFile){favToggle.classList.remove('active');favToggle.textContent='☆';return}
+  const fav=isFavorite(state.currentFile);
+  favToggle.classList.toggle('active',fav);
+  favToggle.textContent=fav?'★':'☆';
+}
+favToggle.onclick=()=>{if(state.currentFile)toggleFavorite(state.currentFile)};
 
 // === Tab switching ===
 function switchTab(tab,fromBack=false){
@@ -457,10 +497,16 @@ function switchTab(tab,fromBack=false){
   document.querySelectorAll('.nav-tab').forEach(t=>t.classList.toggle('active',t.dataset.tab===tab));
   $('browse-tab').style.display=tab==='browse'?'block':'none';
 
+  // Clear search when switching tabs
+  searchInput.value='';state.searchQuery='';
+  searchScopeEl.style.display='none';
+  searchResults.style.display='none';
+
   fileList.style.display='none';
   $('recent-list').style.display='none';
   $('favorites-list').style.display='none';
-  viewer.style.display='none';
+  viewer.style.display='none';viewerToolbar.style.display='none';
+  state.currentFile=null;
 
   if(tab==='browse'){navigate(state.path)}
   else if(tab==='recent'){loadRecent()}
@@ -507,19 +553,20 @@ function showFavorites(){
     const name=path.split('/').pop();
     const icon=getFileIcon({name,type:'file'});
     const badge=`<span class="badge ${getBadgeClass(name)}">${getFileExt(name)}</span>`;
-    return `<div class="file-item" onclick="navToFile('${path}')">
+    const safePath=path.replace(/'/g,"\\'");
+    return `<div class="file-item" onclick="navToFile('${safePath}')">
       <div class="file-icon">${icon}</div>
       <div class="file-info">
         <div class="file-name">${name} ${badge}</div>
         <div class="file-meta">${path}</div>
       </div>
-      <button class="fav-btn active" onclick="toggleFavorite('${path}',event)">⭐</button>
+      <button class="fav-btn active" onclick="toggleFavorite('${safePath}',event)" aria-label="お気に入り解除">★</button>
     </div>`;
   }).join('')+'</div>';
 }
 
 // === Navigation ===
-function showLoading(){loading.classList.add('show');fileList.style.display='none';viewer.style.display='none';$('recent-list').style.display='none';$('favorites-list').style.display='none'}
+function showLoading(){loading.classList.add('show');fileList.style.display='none';viewer.style.display='none';viewerToolbar.style.display='none';$('recent-list').style.display='none';$('favorites-list').style.display='none';searchResults.style.display='none'}
 function hideLoading(){loading.classList.remove('show')}
 
 function updateBreadcrumb(path){
@@ -574,8 +621,8 @@ function showFileList(items){
     const icon=getFileIcon(item);
     const meta=item.type==='dir'?'フォルダ':`${getFileExt(item.name).toUpperCase()}${item.size?' · '+formatSize(item.size):''}`;
     const badge=item.type!=='dir'?`<span class="badge ${getBadgeClass(item.name)}">${getFileExt(item.name)}</span>`:'';
-    const favClass=item.type!=='dir'&&isFavorite(item.path)?'active':'';
-    const favBtn=item.type!=='dir'?`<button class="fav-btn ${favClass}" onclick="toggleFavorite('${item.path}',event)">${isFavorite(item.path)?'⭐':'☆'}</button>`:'';
+    const fav=item.type!=='dir'&&isFavorite(item.path);
+    const favBtn=item.type!=='dir'?`<button class="fav-btn ${fav?'active':''}" onclick="toggleFavorite('${item.path.replace(/'/g,"\\'")}',event)" aria-label="お気に入り">${fav?'★':'☆'}</button>`:'';
     // Escape single quotes in paths for onclick
     const safePath=item.path.replace(/'/g,"\\'");
     return `<div class="file-item" onclick="handleItemClick('${safePath}','${item.type}')">
@@ -606,10 +653,11 @@ function navToCrumb(path){
 }
 
 async function openFile(path){
-  state.currentTab='browse';
+  state.currentTab='browse';state.currentFile=path;
   document.querySelectorAll('.nav-tab').forEach(t=>t.classList.toggle('active',t.dataset.tab==='browse'));
   $('browse-tab').style.display='block';
   updateBreadcrumb(path);showLoading();
+  updateFavToggle();
 
   const ext=getFileExt(path);
   const textExts=['md','txt','js','json','yaml','yml','css','html','log','bat','sh','py','ts','tsx','jsx','mjs','csv','xml','svg','toml','cfg','ini','env'];
@@ -620,7 +668,7 @@ async function openFile(path){
       const content=await getFileContent(path);
       hideLoading();
       fileList.style.display='none';$('recent-list').style.display='none';$('favorites-list').style.display='none';
-      viewer.style.display='block';backBtn.style.display='flex';
+      viewer.style.display='block';viewerToolbar.style.display='flex';
       htmlFrame.style.display='none';binaryViewer.style.display='none';
 
       if(ext==='md'){
@@ -640,7 +688,7 @@ async function openFile(path){
       const data=await res.json();
       hideLoading();
       fileList.style.display='none';$('recent-list').style.display='none';$('favorites-list').style.display='none';
-      viewer.style.display='block';backBtn.style.display='flex';
+      viewer.style.display='block';viewerToolbar.style.display='flex';
       mdViewer.style.display='none';htmlFrame.style.display='none';binaryViewer.style.display='block';
 
       const fileName=path.split('/').pop();
@@ -662,7 +710,10 @@ async function openFile(path){
 }
 
 function restoreView(prev){
-  viewer.style.display='none';backBtn.style.display='none';
+  viewer.style.display='none';viewerToolbar.style.display='none';
+  state.currentFile=null;
+  searchResults.style.display='none';
+  searchInput.value='';state.searchQuery='';
   if(prev){
     const targetTab=prev.tab||'browse';
     state.currentTab=targetTab;
@@ -679,19 +730,173 @@ function restoreView(prev){
 // Back button uses browser history (fires popstate)
 backBtn.onclick=()=>{
   if(state.history.length>0)history.back();
-  else{viewer.style.display='none';backBtn.style.display='none';navigate('')}
+  else{viewer.style.display='none';viewerToolbar.style.display='none';state.currentFile=null;navigate('')}
 };
 
 // === Search ===
-let searchTimer;
+function setSearchScope(scope){
+  state.searchScope=scope;
+  document.querySelectorAll('.scope-chip').forEach(el=>{
+    el.classList.toggle('active',el.dataset.scope===scope);
+  });
+  if(searchInput.value.trim())runSearch(searchInput.value.trim());
+}
+
 searchInput.addEventListener('input',e=>{
-  clearTimeout(searchTimer);
-  searchTimer=setTimeout(()=>{
-    state.searchQuery=e.target.value;
+  clearTimeout(state.searchTimer);
+  const q=e.target.value.trim();
+  state.searchQuery=q;
+  if(!q){
+    searchScopeEl.style.display='none';
+    searchResults.style.display='none';
+    // Restore current folder view
     const key=`contents:${state.path}`;
-    if(state.cache[key]){const data=state.cache[key];if(Array.isArray(data))showFileList(data)}
-  },200);
+    if(state.cache[key]&&Array.isArray(state.cache[key])){
+      fileList.style.display='block';showFileList(state.cache[key]);
+    }else navigate(state.path);
+    return;
+  }
+  searchScopeEl.style.display='flex';
+  state.searchTimer=setTimeout(()=>runSearch(q),500);
 });
+
+async function runSearch(query){
+  if(!query)return;
+  fileList.style.display='none';
+  $('recent-list').style.display='none';
+  $('favorites-list').style.display='none';
+  viewer.style.display='none';viewerToolbar.style.display='none';
+  searchResults.style.display='block';
+  searchResults.innerHTML=`<div style="padding:40px;text-align:center"><div class="spinner" style="margin:0 auto"></div><div class="loading-text" style="margin-top:12px">検索中...</div></div>`;
+
+  if(state.searchScope==='current'){
+    runLocalSearch(query);
+    return;
+  }
+  try{
+    const res=await searchGlobal(query);
+    renderSearchResults(query,res);
+  }catch(err){
+    searchResults.innerHTML=`<div class="empty-state"><div class="icon">⚠️</div><p>検索に失敗<br><small>${err.message}</small><br><br><small style="color:var(--text3)">GitHub Search APIのレート制限（30回/分）にかかった可能性があります</small></p></div>`;
+  }
+}
+
+async function runLocalSearch(query){
+  // Search within the current folder only
+  const key=`contents:${state.path}`;
+  let items=state.cache[key];
+  if(!items||!Array.isArray(items)){
+    try{items=await getContents(state.path)}catch(e){
+      searchResults.innerHTML=`<div class="empty-state"><div class="icon">⚠️</div><p>${e.message}</p></div>`;return;
+    }
+  }
+  const q=query.toLowerCase();
+  const matched=items.filter(it=>it.name.toLowerCase().includes(q));
+  renderSearchResults(query,{filename:matched.map(it=>({name:it.name,path:it.path})),content:[],total:matched.length,isLocal:true});
+}
+
+async function searchGlobal(query){
+  const q=`${query} repo:${state.owner}/${state.repo}`;
+  const url=`https://api.github.com/search/code?per_page=50&q=${encodeURIComponent(q)}`;
+  const headers={'Accept':'application/vnd.github.v3.text-match+json','Authorization':`Bearer ${state.token}`};
+  const res=await fetch(url,{headers});
+  // Update rate info
+  const remaining=res.headers.get('x-ratelimit-remaining');
+  const limit=res.headers.get('x-ratelimit-limit');
+  if(remaining!==null){
+    $('rate-text').textContent=`${remaining}/${limit}`;
+    const pct=parseInt(remaining)/parseInt(limit)*100;
+    $('rate-dot').style.background=pct>50?'var(--green)':pct>20?'var(--yellow)':'var(--red)';
+  }
+  if(!res.ok){
+    if(res.status===403)throw new Error('レート制限に達しました（30回/分）');
+    if(res.status===422)throw new Error('検索クエリが無効です');
+    throw new Error(`検索APIエラー: ${res.status}`);
+  }
+  const data=await res.json();
+  // Categorize: filename match vs content match
+  const filename=[];const content=[];
+  const qLower=query.toLowerCase();
+  for(const item of data.items||[]){
+    const inName=item.name.toLowerCase().includes(qLower)||item.path.toLowerCase().includes(qLower);
+    if(inName)filename.push(item);else content.push(item);
+  }
+  return{filename,content,total:data.total_count};
+}
+
+function escapeHtml(s){return(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+
+function escapeFragmentWithMatches(fragment,matches){
+  if(!matches||!matches.length)return escapeHtml(fragment);
+  const points=[];
+  matches.forEach(m=>{
+    points.push({pos:m.indices[0],type:'start'});
+    points.push({pos:m.indices[1],type:'end'});
+  });
+  points.sort((a,b)=>a.pos-b.pos);
+  let out='',last=0;
+  points.forEach(p=>{
+    out+=escapeHtml(fragment.slice(last,p.pos));
+    out+=p.type==='start'?'<mark>':'</mark>';
+    last=p.pos;
+  });
+  out+=escapeHtml(fragment.slice(last));
+  return out;
+}
+
+function renderSearchResults(query,res){
+  const{filename,content,total,isLocal}=res;
+  if(!filename.length&&!content.length){
+    searchResults.innerHTML=`<div class="empty-state"><div class="icon">🔍</div><p>「${escapeHtml(query)}」の検索結果なし${isLocal?'<br><small>現在のフォルダ内で検索しました</small>':''}</p></div>`;
+    return;
+  }
+  let html='';
+  if(filename.length){
+    html+=`<div class="search-section"><div class="search-header">📁 ファイル名一致 <span class="count">${filename.length}</span></div>`;
+    html+=filename.map(item=>{
+      const icon=getFileIcon({name:item.name,type:'file'});
+      const badge=`<span class="badge ${getBadgeClass(item.name)}">${getFileExt(item.name)}</span>`;
+      const safePath=item.path.replace(/'/g,"\\'");
+      const fav=isFavorite(item.path);
+      return `<div class="file-item" onclick="navToFile('${safePath}')">
+        <div class="file-icon">${icon}</div>
+        <div class="file-info">
+          <div class="file-name">${escapeHtml(item.name)} ${badge}</div>
+          <div class="file-meta">${escapeHtml(item.path)}</div>
+        </div>
+        <button class="fav-btn ${fav?'active':''}" onclick="toggleFavorite('${safePath}',event)" aria-label="お気に入り">${fav?'★':'☆'}</button>
+      </div>`;
+    }).join('');
+    html+='</div>';
+  }
+  if(content.length){
+    html+=`<div class="search-section"><div class="search-header">📄 本文一致 <span class="count">${content.length}</span></div>`;
+    html+=content.map(item=>{
+      const icon=getFileIcon({name:item.name,type:'file'});
+      const badge=`<span class="badge ${getBadgeClass(item.name)}">${getFileExt(item.name)}</span>`;
+      const safePath=item.path.replace(/'/g,"\\'");
+      const fav=isFavorite(item.path);
+      const match=item.text_matches&&item.text_matches[0];
+      const snippet=match?`<div class="search-snippet">${escapeFragmentWithMatches(match.fragment,match.matches||[])}</div>`:'';
+      return `<div class="file-item" style="flex-direction:column;align-items:stretch" onclick="navToFile('${safePath}')">
+        <div style="display:flex;align-items:center;gap:12px;width:100%">
+          <div class="file-icon">${icon}</div>
+          <div class="file-info">
+            <div class="file-name">${escapeHtml(item.name)} ${badge}</div>
+            <div class="file-meta">${escapeHtml(item.path)}</div>
+          </div>
+          <button class="fav-btn ${fav?'active':''}" onclick="toggleFavorite('${safePath}',event)" aria-label="お気に入り">${fav?'★':'☆'}</button>
+        </div>
+        ${snippet}
+      </div>`;
+    }).join('');
+    html+='</div>';
+  }
+  if(total>filename.length+content.length){
+    html+=`<div style="text-align:center;padding:16px;color:var(--text3);font-size:12px">全${total}件中 ${filename.length+content.length}件を表示</div>`;
+  }
+  searchResults.innerHTML=html;
+}
 
 // === History-based back navigation ===
 // popstate fires on: OS back button, edge-swipe back gesture, browser back
