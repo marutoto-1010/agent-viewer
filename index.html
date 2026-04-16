@@ -795,12 +795,29 @@ async function runLocalSearch(query){
   renderSearchResults(query,{filename:matched.map(it=>({name:it.name,path:it.path})),content:[],total:matched.length,isLocal:true});
 }
 
-async function searchGlobal(query){
+async function getRepoTree(){
+  const key='tree:'+state.branch;
+  if(state.cache[key])return state.cache[key];
+  const url=`https://api.github.com/repos/${state.owner}/${state.repo}/git/trees/${state.branch}?recursive=1`;
+  const res=await apiFetch(url);
+  const data=await res.json();
+  state.cache[key]={tree:data.tree||[],truncated:!!data.truncated};
+  return state.cache[key];
+}
+
+async function searchFilenames(query){
+  const{tree,truncated}=await getRepoTree();
+  const q=query.toLowerCase();
+  const matches=tree.filter(item=>item.type==='blob'&&item.path.toLowerCase().includes(q));
+  return{items:matches.slice(0,100),total:matches.length,truncated};
+}
+
+async function searchContents(query){
+  // GitHub Code Search API - may not work with Fine-grained PAT on private repos
   const q=`${query} repo:${state.owner}/${state.repo}`;
-  const url=`https://api.github.com/search/code?per_page=50&q=${encodeURIComponent(q)}`;
-  const headers={'Accept':'application/vnd.github.v3.text-match+json','Authorization':`Bearer ${state.token}`};
+  const url=`https://api.github.com/search/code?per_page=30&q=${encodeURIComponent(q)}`;
+  const headers={'Accept':'application/vnd.github.text-match+json','Authorization':`Bearer ${state.token}`};
   const res=await fetch(url,{headers});
-  // Update rate info
   const remaining=res.headers.get('x-ratelimit-remaining');
   const limit=res.headers.get('x-ratelimit-limit');
   if(remaining!==null){
@@ -809,19 +826,45 @@ async function searchGlobal(query){
     $('rate-dot').style.background=pct>50?'var(--green)':pct>20?'var(--yellow)':'var(--red)';
   }
   if(!res.ok){
-    if(res.status===403)throw new Error('レート制限に達しました（30回/分）');
-    if(res.status===422)throw new Error('検索クエリが無効です');
-    throw new Error(`検索APIエラー: ${res.status}`);
+    const body=await res.json().catch(()=>({}));
+    const msg=body.message||res.statusText;
+    if(res.status===403){
+      if(/rate limit/i.test(msg))throw new Error('RATE_LIMIT');
+      throw new Error('FG_PAT_UNSUPPORTED');
+    }
+    if(res.status===422)throw new Error('INVALID_QUERY:'+msg);
+    if(res.status===401)throw new Error('AUTH:'+msg);
+    throw new Error(`API_${res.status}:${msg}`);
   }
   const data=await res.json();
-  // Categorize: filename match vs content match
-  const filename=[];const content=[];
-  const qLower=query.toLowerCase();
-  for(const item of data.items||[]){
-    const inName=item.name.toLowerCase().includes(qLower)||item.path.toLowerCase().includes(qLower);
-    if(inName)filename.push(item);else content.push(item);
-  }
-  return{filename,content,total:data.total_count};
+  return{items:data.items||[],total:data.total_count||0};
+}
+
+async function searchGlobal(query){
+  // Filename search via Git Tree API (works with Fine-grained PAT)
+  const filenameResult=await searchFilenames(query);
+  const filenameItems=filenameResult.items.map(it=>({
+    name:it.path.split('/').pop(),
+    path:it.path,
+    sha:it.sha
+  }));
+  const filenamePaths=new Set(filenameItems.map(it=>it.path));
+
+  // Content search via Code Search API (may fail on private+fine-grained)
+  let contentItems=[];let contentError=null;
+  try{
+    const r=await searchContents(query);
+    // Filter out items already in filename matches to avoid duplicates
+    contentItems=r.items.filter(it=>!filenamePaths.has(it.path));
+  }catch(err){contentError=err.message}
+
+  return{
+    filename:filenameItems,
+    content:contentItems,
+    total:filenameItems.length+contentItems.length,
+    contentError,
+    treeTruncated:filenameResult.truncated
+  };
 }
 
 function escapeHtml(s){return(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
@@ -845,56 +888,72 @@ function escapeFragmentWithMatches(fragment,matches){
 }
 
 function renderSearchResults(query,res){
-  const{filename,content,total,isLocal}=res;
-  if(!filename.length&&!content.length){
-    searchResults.innerHTML=`<div class="empty-state"><div class="icon">🔍</div><p>「${escapeHtml(query)}」の検索結果なし${isLocal?'<br><small>現在のフォルダ内で検索しました</small>':''}</p></div>`;
-    return;
-  }
+  const{filename,content,total,isLocal,contentError,treeTruncated}=res;
   let html='';
-  if(filename.length){
-    html+=`<div class="search-section"><div class="search-header">📁 ファイル名一致 <span class="count">${filename.length}</span></div>`;
-    html+=filename.map(item=>{
-      const icon=getFileIcon({name:item.name,type:'file'});
-      const badge=`<span class="badge ${getBadgeClass(item.name)}">${getFileExt(item.name)}</span>`;
-      const safePath=item.path.replace(/'/g,"\\'");
-      const fav=isFavorite(item.path);
-      return `<div class="file-item" onclick="navToFile('${safePath}')">
-        <div class="file-icon">${icon}</div>
-        <div class="file-info">
-          <div class="file-name">${escapeHtml(item.name)} ${badge}</div>
-          <div class="file-meta">${escapeHtml(item.path)}</div>
-        </div>
-        <button class="fav-btn ${fav?'active':''}" onclick="toggleFavorite('${safePath}',event)" aria-label="お気に入り">${fav?'★':'☆'}</button>
-      </div>`;
-    }).join('');
-    html+='</div>';
-  }
-  if(content.length){
-    html+=`<div class="search-section"><div class="search-header">📄 本文一致 <span class="count">${content.length}</span></div>`;
-    html+=content.map(item=>{
-      const icon=getFileIcon({name:item.name,type:'file'});
-      const badge=`<span class="badge ${getBadgeClass(item.name)}">${getFileExt(item.name)}</span>`;
-      const safePath=item.path.replace(/'/g,"\\'");
-      const fav=isFavorite(item.path);
-      const match=item.text_matches&&item.text_matches[0];
-      const snippet=match?`<div class="search-snippet">${escapeFragmentWithMatches(match.fragment,match.matches||[])}</div>`:'';
-      return `<div class="file-item" style="flex-direction:column;align-items:stretch" onclick="navToFile('${safePath}')">
-        <div style="display:flex;align-items:center;gap:12px;width:100%">
+
+  if(!filename.length&&!content.length){
+    html=`<div class="empty-state"><div class="icon">🔍</div><p>「${escapeHtml(query)}」の検索結果なし${isLocal?'<br><small>現在のフォルダ内で検索しました</small>':''}</p></div>`;
+  }else{
+    if(filename.length){
+      html+=`<div class="search-section"><div class="search-header">📁 ファイル名一致 <span class="count">${filename.length}</span></div>`;
+      html+=filename.map(item=>{
+        const icon=getFileIcon({name:item.name,type:'file'});
+        const badge=`<span class="badge ${getBadgeClass(item.name)}">${getFileExt(item.name)}</span>`;
+        const safePath=item.path.replace(/'/g,"\\'");
+        const fav=isFavorite(item.path);
+        return `<div class="file-item" onclick="navToFile('${safePath}')">
           <div class="file-icon">${icon}</div>
           <div class="file-info">
             <div class="file-name">${escapeHtml(item.name)} ${badge}</div>
             <div class="file-meta">${escapeHtml(item.path)}</div>
           </div>
           <button class="fav-btn ${fav?'active':''}" onclick="toggleFavorite('${safePath}',event)" aria-label="お気に入り">${fav?'★':'☆'}</button>
-        </div>
-        ${snippet}
-      </div>`;
-    }).join('');
-    html+='</div>';
+        </div>`;
+      }).join('');
+      html+='</div>';
+    }
+    if(content.length){
+      html+=`<div class="search-section"><div class="search-header">📄 本文一致 <span class="count">${content.length}</span></div>`;
+      html+=content.map(item=>{
+        const icon=getFileIcon({name:item.name,type:'file'});
+        const badge=`<span class="badge ${getBadgeClass(item.name)}">${getFileExt(item.name)}</span>`;
+        const safePath=item.path.replace(/'/g,"\\'");
+        const fav=isFavorite(item.path);
+        const match=item.text_matches&&item.text_matches[0];
+        const snippet=match?`<div class="search-snippet">${escapeFragmentWithMatches(match.fragment,match.matches||[])}</div>`:'';
+        return `<div class="file-item" style="flex-direction:column;align-items:stretch" onclick="navToFile('${safePath}')">
+          <div style="display:flex;align-items:center;gap:12px;width:100%">
+            <div class="file-icon">${icon}</div>
+            <div class="file-info">
+              <div class="file-name">${escapeHtml(item.name)} ${badge}</div>
+              <div class="file-meta">${escapeHtml(item.path)}</div>
+            </div>
+            <button class="fav-btn ${fav?'active':''}" onclick="toggleFavorite('${safePath}',event)" aria-label="お気に入り">${fav?'★':'☆'}</button>
+          </div>
+          ${snippet}
+        </div>`;
+      }).join('');
+      html+='</div>';
+    }
   }
-  if(total>filename.length+content.length){
-    html+=`<div style="text-align:center;padding:16px;color:var(--text3);font-size:12px">全${total}件中 ${filename.length+content.length}件を表示</div>`;
+
+  // Show notice about content search limitation
+  if(contentError&&!isLocal){
+    let notice='';
+    if(contentError==='FG_PAT_UNSUPPORTED'){
+      notice=`⚠️ 本文検索は利用できません<br><small style="line-height:1.6">Fine-grained PATはprivateリポのCode Search API非対応のため。<br>本文検索が必要な場合は、<a href="https://github.com/settings/tokens/new?scopes=repo&description=viewer-read-classic" target="_blank" style="color:var(--accent)">Classic PAT（repoスコープ）</a>を作成して設定画面で入れ替えてください。</small>`;
+    }else if(contentError==='RATE_LIMIT'){
+      notice=`⚠️ 本文検索のレート制限（30回/分）に達しました。しばらく待ってから再試行してください。`;
+    }else{
+      notice=`⚠️ 本文検索エラー: <small>${escapeHtml(contentError)}</small>`;
+    }
+    html+=`<div style="margin:16px;padding:12px;background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.3);border-radius:var(--radius);font-size:12px;color:var(--text2)">${notice}</div>`;
   }
+
+  if(treeTruncated){
+    html+=`<div style="text-align:center;padding:12px;color:var(--text3);font-size:11px">※ リポジトリが大きすぎるため一部のファイルが検索対象外です</div>`;
+  }
+
   searchResults.innerHTML=html;
 }
 
