@@ -448,7 +448,11 @@ function toggleFavorite(path,e){
 }
 
 // === Tab switching ===
-function switchTab(tab){
+function switchTab(tab,fromBack=false){
+  if(!fromBack&&tab!==state.currentTab){
+    state.history.push({path:state.path,tab:state.currentTab});
+    history.pushState({nav:true},'');
+  }
   state.currentTab=tab;
   document.querySelectorAll('.nav-tab').forEach(t=>t.classList.toggle('active',t.dataset.tab===tab));
   $('browse-tab').style.display=tab==='browse'?'block':'none';
@@ -503,7 +507,7 @@ function showFavorites(){
     const name=path.split('/').pop();
     const icon=getFileIcon({name,type:'file'});
     const badge=`<span class="badge ${getBadgeClass(name)}">${getFileExt(name)}</span>`;
-    return `<div class="file-item" onclick="openFile('${path}')">
+    return `<div class="file-item" onclick="navToFile('${path}')">
       <div class="file-icon">${icon}</div>
       <div class="file-info">
         <div class="file-name">${name} ${badge}</div>
@@ -520,14 +524,14 @@ function hideLoading(){loading.classList.remove('show')}
 
 function updateBreadcrumb(path){
   const parts=path?path.split('/'):[];
-  let html='<span class="crumb" onclick="navigate(\'\')">🏠</span>';
+  let html='<span class="crumb" onclick="navToCrumb(\'\')">🏠</span>';
   let cumPath='';
   parts.forEach((part,i)=>{
     cumPath+=((cumPath?'/':'')+part);
     const isLast=i===parts.length-1;
     html+=`<span class="crumb-sep">›</span>`;
     if(isLast){html+=`<span class="crumb current">${part}</span>`}
-    else{const p=cumPath;html+=`<span class="crumb" onclick="navigate('${p}')">${part}</span>`}
+    else{const p=cumPath;html+=`<span class="crumb" onclick="navToCrumb('${p}')">${part}</span>`}
   });
   breadcrumb.innerHTML=html;
   breadcrumb.scrollLeft=breadcrumb.scrollWidth;
@@ -587,7 +591,18 @@ function showFileList(items){
 
 function handleItemClick(path,type){
   state.history.push({path:state.path,tab:state.currentTab});
+  history.pushState({nav:true},'');
   if(type==='dir'){navigate(path)}else{openFile(path)}
+}
+function navToFile(path){
+  state.history.push({path:state.path,tab:state.currentTab});
+  history.pushState({nav:true},'');
+  openFile(path);
+}
+function navToCrumb(path){
+  state.history.push({path:state.path,tab:state.currentTab});
+  history.pushState({nav:true},'');
+  navigate(path);
 }
 
 async function openFile(path){
@@ -646,15 +661,26 @@ async function openFile(path){
   }
 }
 
-function goBack(){
-  const prev=state.history.pop();
+function restoreView(prev){
   viewer.style.display='none';backBtn.style.display='none';
   if(prev){
-    switchTab(prev.tab||'browse');
-    if(prev.tab==='browse'||!prev.tab)navigate(prev.path||'');
+    const targetTab=prev.tab||'browse';
+    state.currentTab=targetTab;
+    document.querySelectorAll('.nav-tab').forEach(t=>t.classList.toggle('active',t.dataset.tab===targetTab));
+    $('browse-tab').style.display=targetTab==='browse'?'block':'none';
+    fileList.style.display='none';
+    $('recent-list').style.display='none';
+    $('favorites-list').style.display='none';
+    if(targetTab==='browse')navigate(prev.path||'');
+    else if(targetTab==='recent')loadRecent();
+    else if(targetTab==='favorites')showFavorites();
   }else{navigate('')}
 }
-backBtn.onclick=goBack;
+// Back button uses browser history (fires popstate)
+backBtn.onclick=()=>{
+  if(state.history.length>0)history.back();
+  else{viewer.style.display='none';backBtn.style.display='none';navigate('')}
+};
 
 // === Search ===
 let searchTimer;
@@ -667,20 +693,20 @@ searchInput.addEventListener('input',e=>{
   },200);
 });
 
-// === Gestures ===
-let touchStartX=0;
-document.addEventListener('touchstart',e=>{touchStartX=e.touches[0].clientX},{passive:true});
-document.addEventListener('touchend',e=>{
-  const dx=e.changedTouches[0].clientX-touchStartX;
-  if(dx>100&&touchStartX<40){goBack()}
-},{passive:true});
-window.addEventListener('popstate',()=>{goBack()});
+// === History-based back navigation ===
+// popstate fires on: OS back button, edge-swipe back gesture, browser back
+window.addEventListener('popstate',()=>{
+  const prev=state.history.pop();
+  restoreView(prev);
+});
 
 // === Service Worker ===
 if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(()=>{})}
 
 // === Init ===
 loadFavorites();
+// Anchor initial history entry (prevents first swipe-back from closing PWA)
+history.replaceState({nav:false,root:true},'');
 if(loadConfig()&&state.token){
   navigate('');
 }else{
