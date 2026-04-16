@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0f172a">
+<title>Claude Agent Viewer</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📂</text></svg>">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#0f172a;--bg2:#1e293b;--bg3:#334155;
+  --text:#e2e8f0;--text2:#94a3b8;--text3:#64748b;
+  --accent:#818cf8;--accent2:#6366f1;
+  --green:#34d399;--red:#f87171;--yellow:#fbbf24;
+  --border:#334155;
+  --radius:12px;
+  --safe-top:env(safe-area-inset-top,0px);
+  --safe-bottom:env(safe-area-inset-bottom,0px);
+}
+html,body{height:100%;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:var(--bg);color:var(--text);overflow:hidden;-webkit-tap-highlight-color:transparent}
+
+#app{display:flex;flex-direction:column;height:100%;padding-top:var(--safe-top)}
+
+/* Header */
+header{background:var(--bg2);border-bottom:1px solid var(--border);padding:12px 16px;flex-shrink:0;z-index:10;display:flex;align-items:center;justify-content:space-between}
+header h1{font-size:16px;font-weight:600;display:flex;align-items:center;gap:8px}
+header h1 span{color:var(--accent)}
+#rate-info{font-size:11px;color:var(--text3);display:flex;align-items:center;gap:4px}
+#rate-dot{width:8px;height:8px;border-radius:50%;background:var(--green)}
+
+/* Tab navigation */
+#tab-nav{display:flex;border-bottom:1px solid var(--border);background:var(--bg2);flex-shrink:0}
+.nav-tab{flex:1;padding:10px 8px;text-align:center;font-size:13px;cursor:pointer;color:var(--text3);border-bottom:2px solid transparent;transition:all .2s;-webkit-user-select:none}
+.nav-tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+
+/* Breadcrumb */
+#breadcrumb{display:flex;align-items:center;gap:4px;padding:10px 16px;background:var(--bg);border-bottom:1px solid var(--border);flex-shrink:0;overflow-x:auto;white-space:nowrap;-webkit-overflow-scrolling:touch;scrollbar-width:none}
+#breadcrumb::-webkit-scrollbar{display:none}
+.crumb{color:var(--accent);font-size:13px;cursor:pointer;padding:4px 6px;border-radius:6px;flex-shrink:0}
+.crumb:hover,.crumb:active{background:var(--bg2)}
+.crumb-sep{color:var(--text3);font-size:12px;flex-shrink:0}
+.crumb.current{color:var(--text);cursor:default}
+.crumb.current:hover{background:transparent}
+
+/* Search */
+#search-bar{padding:8px 16px;flex-shrink:0;background:var(--bg);position:relative}
+#search-input{width:100%;padding:10px 14px 10px 38px;border:1px solid var(--border);border-radius:var(--radius);background:var(--bg2);color:var(--text);font-size:15px;outline:none;transition:border-color .2s}
+#search-input:focus{border-color:var(--accent)}
+#search-icon{position:absolute;left:30px;top:50%;transform:translateY(-50%);color:var(--text3);font-size:16px;pointer-events:none}
+
+/* Content area */
+#content{flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:var(--safe-bottom)}
+
+/* Section headers */
+.section-header{padding:12px 16px 6px;font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.5px}
+
+/* File list */
+.file-list{padding:4px 8px}
+.file-item{display:flex;align-items:center;gap:12px;padding:14px 16px;border-radius:var(--radius);cursor:pointer;transition:background .15s;-webkit-user-select:none;user-select:none}
+.file-item:hover,.file-item:active{background:var(--bg2)}
+.file-icon{font-size:22px;flex-shrink:0;width:32px;text-align:center}
+.file-info{flex:1;min-width:0}
+.file-name{font-size:15px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.file-meta{font-size:12px;color:var(--text3);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.file-actions{display:flex;gap:8px;flex-shrink:0;align-items:center}
+.file-arrow{color:var(--text3);font-size:14px;flex-shrink:0}
+.fav-btn{background:none;border:none;font-size:18px;cursor:pointer;padding:4px;opacity:.4;transition:opacity .2s}
+.fav-btn.active{opacity:1}
+
+/* Recent commit items */
+.commit-item{padding:12px 16px;border-bottom:1px solid var(--border)}
+.commit-msg{font-size:14px;color:var(--text);margin-bottom:4px}
+.commit-meta{font-size:12px;color:var(--text3)}
+.commit-files{margin-top:6px}
+.commit-file{font-size:12px;color:var(--accent);cursor:pointer;padding:2px 0}
+.commit-file:active{opacity:.7}
+
+/* Markdown viewer */
+#md-viewer{padding:20px 16px;line-height:1.7;font-size:15px;max-width:100%}
+#md-viewer h1{font-size:22px;font-weight:700;margin:24px 0 12px;color:var(--text);border-bottom:1px solid var(--border);padding-bottom:8px}
+#md-viewer h2{font-size:19px;font-weight:600;margin:20px 0 10px;color:var(--text)}
+#md-viewer h3{font-size:16px;font-weight:600;margin:16px 0 8px;color:var(--text)}
+#md-viewer p{margin:8px 0;color:var(--text2)}
+#md-viewer ul,#md-viewer ol{padding-left:24px;margin:8px 0;color:var(--text2)}
+#md-viewer li{margin:4px 0}
+#md-viewer code{background:var(--bg3);padding:2px 6px;border-radius:4px;font-size:13px;font-family:'SF Mono',Monaco,Consolas,monospace}
+#md-viewer pre{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:14px;overflow-x:auto;margin:12px 0}
+#md-viewer pre code{background:none;padding:0;font-size:13px}
+#md-viewer a{color:var(--accent);text-decoration:none}
+#md-viewer a:hover{text-decoration:underline}
+#md-viewer table{width:100%;border-collapse:collapse;margin:12px 0;font-size:13px;overflow-x:auto;display:block}
+#md-viewer th,#md-viewer td{border:1px solid var(--border);padding:8px 10px;text-align:left}
+#md-viewer th{background:var(--bg2);font-weight:600}
+#md-viewer blockquote{border-left:3px solid var(--accent);padding-left:14px;margin:12px 0;color:var(--text3)}
+#md-viewer img{max-width:100%;border-radius:8px;margin:8px 0}
+#md-viewer hr{border:none;border-top:1px solid var(--border);margin:16px 0}
+
+/* HTML preview iframe */
+#html-frame{width:100%;height:100%;border:none;background:#fff}
+
+/* Loading */
+#loading{display:none;justify-content:center;align-items:center;padding:60px;flex-direction:column;gap:12px}
+#loading.show{display:flex}
+.spinner{width:32px;height:32px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loading-text{color:var(--text3);font-size:14px}
+
+/* Auth screen (full page, not modal) */
+#auth-screen{position:fixed;inset:0;background:var(--bg);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:100;padding:24px}
+#auth-screen.hidden{display:none}
+.auth-box{max-width:380px;width:100%}
+.auth-box h2{font-size:20px;margin-bottom:4px;text-align:center}
+.auth-box .subtitle{font-size:13px;color:var(--text2);margin-bottom:24px;line-height:1.5;text-align:center}
+.auth-box .logo{font-size:48px;text-align:center;margin-bottom:16px}
+.input-group{margin-bottom:14px}
+.input-group label{display:block;font-size:12px;font-weight:600;color:var(--text2);margin-bottom:4px;text-transform:uppercase;letter-spacing:.5px}
+.input-group input{width:100%;padding:10px 14px;border:1px solid var(--border);border-radius:8px;background:var(--bg2);color:var(--text);font-size:14px;outline:none}
+.input-group input:focus{border-color:var(--accent)}
+.input-group .hint{font-size:11px;color:var(--text3);margin-top:4px}
+.btn-primary{width:100%;padding:12px;border:none;border-radius:8px;background:var(--accent2);color:#fff;font-size:15px;font-weight:600;cursor:pointer;transition:opacity .2s;margin-top:8px}
+.btn-primary:active{opacity:.8}
+.btn-primary:disabled{opacity:.5;cursor:not-allowed}
+#conn-status{text-align:center;margin-top:12px;font-size:13px;min-height:20px}
+.status-ok{color:var(--green)}
+.status-err{color:var(--red)}
+.status-testing{color:var(--yellow)}
+.token-guide{margin-top:20px;padding:16px;background:var(--bg2);border-radius:var(--radius);border:1px solid var(--border)}
+.token-guide h3{font-size:14px;margin-bottom:8px}
+.token-guide ol{font-size:12px;color:var(--text2);padding-left:20px;line-height:1.8}
+
+/* Settings */
+#settings-btn{position:fixed;bottom:calc(20px + var(--safe-bottom));right:20px;width:48px;height:48px;border-radius:50%;background:var(--accent2);border:none;color:#fff;font-size:20px;cursor:pointer;box-shadow:0 4px 12px rgba(99,102,241,.4);z-index:20;display:flex;align-items:center;justify-content:center;transition:transform .2s}
+#settings-btn:active{transform:scale(.9)}
+
+/* Empty state */
+.empty-state{text-align:center;padding:60px 20px;color:var(--text3)}
+.empty-state .icon{font-size:48px;margin-bottom:12px}
+.empty-state p{font-size:14px;line-height:1.6}
+
+/* Back button in viewer */
+#back-btn{position:sticky;top:0;background:var(--bg);border-bottom:1px solid var(--border);padding:10px 16px;display:none;align-items:center;gap:8px;cursor:pointer;font-size:14px;color:var(--accent);z-index:5;-webkit-user-select:none}
+#back-btn:active{background:var(--bg2)}
+
+/* File type badges */
+.badge{display:inline-block;padding:2px 8px;border-radius:10px;font-size:11px;font-weight:600;text-transform:uppercase}
+.badge-md{background:#1e3a5f;color:#60a5fa}
+.badge-html{background:#3b1f2b;color:#f472b6}
+.badge-pptx{background:#3b2f1f;color:#fb923c}
+.badge-pdf{background:#2d1f1f;color:#f87171}
+.badge-js{background:#2f3b1f;color:#a3e635}
+.badge-yaml{background:#1f2f3b;color:#67e8f9}
+.badge-other{background:var(--bg3);color:var(--text2)}
+
+/* Download button */
+.download-btn{display:inline-flex;align-items:center;gap:8px;padding:14px 20px;background:var(--accent2);color:#fff;border:none;border-radius:var(--radius);font-size:15px;font-weight:600;cursor:pointer;margin:20px 16px;transition:opacity .2s;text-decoration:none}
+.download-btn:active{opacity:.8}
+
+/* Toast */
+#toast{position:fixed;bottom:calc(80px + var(--safe-bottom));left:50%;transform:translateX(-50%) translateY(100px);background:var(--bg3);color:var(--text);padding:10px 20px;border-radius:20px;font-size:13px;z-index:50;transition:transform .3s ease;pointer-events:none}
+#toast.show{transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <h1>📂 <span>Agent</span> Viewer</h1>
+    <div id="rate-info"><div id="rate-dot"></div><span id="rate-text">--</span></div>
+  </header>
+
+  <div id="tab-nav">
+    <div class="nav-tab active" data-tab="browse" onclick="switchTab('browse')">📁 ファイル</div>
+    <div class="nav-tab" data-tab="recent" onclick="switchTab('recent')">🕐 最近の更新</div>
+    <div class="nav-tab" data-tab="favorites" onclick="switchTab('favorites')">⭐ お気に入り</div>
+  </div>
+
+  <div id="browse-tab">
+    <div id="breadcrumb"></div>
+    <div id="search-bar">
+      <span id="search-icon">🔍</span>
+      <input type="search" id="search-input" placeholder="ファイル名で検索..." autocomplete="off">
+    </div>
+  </div>
+
+  <div id="content">
+    <div id="loading"><div class="spinner"></div><div class="loading-text">読み込み中...</div></div>
+    <div id="file-list" class="file-list"></div>
+    <div id="recent-list" style="display:none"></div>
+    <div id="favorites-list" style="display:none"></div>
+    <div id="viewer" style="display:none">
+      <div id="back-btn">← 戻る</div>
+      <div id="md-viewer"></div>
+      <iframe id="html-frame" style="display:none" sandbox="allow-scripts allow-same-origin"></iframe>
+      <div id="binary-viewer" style="display:none"></div>
+    </div>
+  </div>
+
+  <button id="settings-btn" title="設定" onclick="showAuthScreen()">⚙</button>
+
+  <div id="auth-screen" class="hidden">
+    <div class="auth-box">
+      <div class="logo">🔐</div>
+      <h2>Claude Agent Viewer</h2>
+      <p class="subtitle">プライベートリポジトリの成果物をスマホから閲覧</p>
+
+      <div class="input-group">
+        <label>Owner</label>
+        <input type="text" id="owner-input" value="marutoto-1010">
+      </div>
+      <div class="input-group">
+        <label>Repository</label>
+        <input type="text" id="repo-input" value="claude-agent">
+      </div>
+      <div class="input-group">
+        <label>Branch</label>
+        <input type="text" id="branch-input" value="master">
+      </div>
+      <div class="input-group">
+        <label>GitHub Token (必須)</label>
+        <input type="password" id="token-input" placeholder="github_pat_...">
+        <div class="hint">Fine-grained Personal Access Token（Contents: Read権限）</div>
+      </div>
+
+      <button class="btn-primary" id="save-auth" onclick="testAndSave()">接続テスト & 保存</button>
+      <div id="conn-status"></div>
+
+      <div class="token-guide">
+        <h3>トークンの取得方法</h3>
+        <ol>
+          <li>GitHub → Settings → Developer settings</li>
+          <li>Personal access tokens → Fine-grained tokens</li>
+          <li>Generate new token</li>
+          <li>Repository access: Only select repositories → <strong>claude-agent</strong></li>
+          <li>Permissions → Repository permissions → Contents: <strong>Read</strong></li>
+          <li>Generate token → コピーして上に貼り付け</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+</div>
+
+<script>
+// === Markdown Parser ===
+const marked=(()=>{function escape(html){return html.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;')}
+function parseInline(src){return src
+.replace(/!\[([^\]]*)\]\(([^)]+)\)/g,'<img alt="$1" src="$2">')
+.replace(/`([^`]+)`/g,'<code>$1</code>')
+.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
+.replace(/\*(.+?)\*/g,'<em>$1</em>')
+.replace(/\[([^\]]+)\]\(([^)]+)\)/g,'<a href="$2" target="_blank" rel="noopener">$1</a>')}
+function parse(md){
+const lines=md.split('\n');let html='',i=0;
+while(i<lines.length){
+const line=lines[i];
+if(line.startsWith('```')){const lang=line.slice(3).trim();let code='';i++;while(i<lines.length&&!lines[i].startsWith('```')){code+=escape(lines[i])+'\n';i++}html+=`<pre><code class="language-${lang}">${code}</code></pre>`;i++;continue}
+const hm=line.match(/^(#{1,6})\s+(.+)/);if(hm){html+=`<h${hm[1].length}>${parseInline(hm[2])}</h${hm[1].length}>`;i++;continue}
+if(/^(-{3,}|\*{3,}|_{3,})$/.test(line.trim())){html+='<hr>';i++;continue}
+if(line.includes('|')&&i+1<lines.length&&/^\|?\s*[-:]+/.test(lines[i+1])){let thead='<thead><tr>';const cells=line.split('|').map(c=>c.trim()).filter(Boolean);cells.forEach(c=>{thead+=`<th>${parseInline(c)}</th>`});thead+='</tr></thead>';i+=2;let tbody='<tbody>';while(i<lines.length&&lines[i].includes('|')){tbody+='<tr>';lines[i].split('|').map(c=>c.trim()).filter(Boolean).forEach(c=>{tbody+=`<td>${parseInline(c)}</td>`});tbody+='</tr>';i++}tbody+='</tbody>';html+=`<table>${thead}${tbody}</table>`;continue}
+if(line.startsWith('>')){let bq='';while(i<lines.length&&lines[i].startsWith('>')){bq+=lines[i].replace(/^>\s?/,'')+'\n';i++}html+=`<blockquote>${parse(bq)}</blockquote>`;continue}
+if(/^[\s]*[-*+]\s/.test(line)){let items='';while(i<lines.length&&/^[\s]*[-*+]\s/.test(lines[i])){items+=`<li>${parseInline(lines[i].replace(/^[\s]*[-*+]\s/,''))}</li>`;i++}html+=`<ul>${items}</ul>`;continue}
+if(/^\d+\.\s/.test(line)){let items='';while(i<lines.length&&/^\d+\.\s/.test(lines[i])){items+=`<li>${parseInline(lines[i].replace(/^\d+\.\s/,''))}</li>`;i++}html+=`<ol>${items}</ol>`;continue}
+if(!line.trim()){i++;continue}
+let p='';while(i<lines.length&&lines[i].trim()&&!lines[i].startsWith('#')&&!lines[i].startsWith('```')&&!lines[i].startsWith('>')&&!/^[-*+]\s/.test(lines[i])&&!/^\d+\.\s/.test(lines[i])){p+=lines[i]+' ';i++}
+if(p)html+=`<p>${parseInline(p.trim())}</p>`}
+return html}
+return{parse}})();
+
+// === State ===
+const state={
+  owner:'marutoto-1010',repo:'claude-agent',branch:'master',token:'',
+  path:'',cache:{},searchQuery:'',history:[],
+  currentTab:'browse',favorites:[]
+};
+
+// === DOM helpers ===
+const $=id=>document.getElementById(id);
+const fileList=$('file-list');const viewer=$('viewer');const mdViewer=$('md-viewer');
+const htmlFrame=$('html-frame');const binaryViewer=$('binary-viewer');
+const breadcrumb=$('breadcrumb');const loading=$('loading');
+const searchInput=$('search-input');const backBtn=$('back-btn');
+const authScreen=$('auth-screen');const connStatus=$('conn-status');
+
+// === Toast ===
+function toast(msg){const t=$('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2000)}
+
+// === Config ===
+function loadConfig(){
+  const saved=localStorage.getItem('agent-viewer-config');
+  if(saved){const c=JSON.parse(saved);Object.assign(state,c);return true}
+  return false;
+}
+function loadFavorites(){
+  const f=localStorage.getItem('agent-viewer-favorites');
+  if(f)state.favorites=JSON.parse(f);
+}
+function saveFavorites(){localStorage.setItem('agent-viewer-favorites',JSON.stringify(state.favorites))}
+function saveConfig(){
+  localStorage.setItem('agent-viewer-config',JSON.stringify({
+    owner:state.owner,repo:state.repo,branch:state.branch,token:state.token
+  }));
+}
+
+// === Auth ===
+function showAuthScreen(){
+  $('owner-input').value=state.owner;
+  $('repo-input').value=state.repo;
+  $('branch-input').value=state.branch;
+  $('token-input').value=state.token;
+  connStatus.innerHTML='';
+  authScreen.classList.remove('hidden');
+}
+function hideAuthScreen(){authScreen.classList.add('hidden')}
+
+async function testAndSave(){
+  const owner=$('owner-input').value.trim()||'marutoto-1010';
+  const repo=$('repo-input').value.trim()||'claude-agent';
+  const branch=$('branch-input').value.trim()||'master';
+  const token=$('token-input').value.trim();
+
+  if(!token){connStatus.innerHTML='<span class="status-err">トークンを入力してください（privateリポには必須）</span>';return}
+
+  connStatus.innerHTML='<span class="status-testing">接続テスト中...</span>';
+  $('save-auth').disabled=true;
+
+  try{
+    const res=await fetch(`https://api.github.com/repos/${owner}/${repo}`,{
+      headers:{'Accept':'application/vnd.github.v3+json','Authorization':`Bearer ${token}`}
+    });
+    if(!res.ok){
+      const data=await res.json().catch(()=>({}));
+      throw new Error(res.status===401?'トークンが無効です':res.status===404?'リポジトリが見つかりません':data.message||res.statusText);
+    }
+    const repoData=await res.json();
+    // Test branch access
+    const branchRes=await fetch(`https://api.github.com/repos/${owner}/${repo}/branches/${branch}`,{
+      headers:{'Accept':'application/vnd.github.v3+json','Authorization':`Bearer ${token}`}
+    });
+    if(!branchRes.ok)throw new Error(`ブランチ "${branch}" が見つかりません`);
+
+    state.owner=owner;state.repo=repo;state.branch=branch;state.token=token;
+    state.cache={};
+    saveConfig();
+    connStatus.innerHTML=`<span class="status-ok">接続成功 (${repoData.private?'Private':'Public'}リポ)</span>`;
+    setTimeout(()=>{hideAuthScreen();switchTab('browse');navigate('')},800);
+  }catch(err){
+    connStatus.innerHTML=`<span class="status-err">${err.message}</span>`;
+  }finally{
+    $('save-auth').disabled=false;
+  }
+}
+
+// === GitHub API ===
+async function apiFetch(url){
+  const headers={'Accept':'application/vnd.github.v3+json'};
+  if(state.token)headers['Authorization']=`Bearer ${state.token}`;
+  const res=await fetch(url,{headers});
+  // Update rate limit display
+  const remaining=res.headers.get('x-ratelimit-remaining');
+  const limit=res.headers.get('x-ratelimit-limit');
+  if(remaining!==null){
+    const pct=parseInt(remaining)/parseInt(limit)*100;
+    $('rate-text').textContent=`${remaining}/${limit}`;
+    $('rate-dot').style.background=pct>50?'var(--green)':pct>20?'var(--yellow)':'var(--red)';
+  }
+  if(!res.ok){
+    if(res.status===401||res.status===403){throw new Error('認証エラー: トークンを確認してください')}
+    if(res.status===404){throw new Error('見つかりません')}
+    throw new Error(`API Error: ${res.status}`);
+  }
+  return res;
+}
+
+async function getContents(path){
+  const key=`contents:${path}`;
+  if(state.cache[key])return state.cache[key];
+  const res=await apiFetch(`https://api.github.com/repos/${state.owner}/${state.repo}/contents/${encodeURIComponent(path).replace(/%2F/g,'/')}?ref=${state.branch}`);
+  const data=await res.json();
+  state.cache[key]=data;
+  return data;
+}
+
+async function getFileContent(path){
+  const res=await apiFetch(`https://api.github.com/repos/${state.owner}/${state.repo}/contents/${encodeURIComponent(path).replace(/%2F/g,'/')}?ref=${state.branch}`);
+  const data=await res.json();
+  if(data.encoding==='base64'){
+    const bytes=Uint8Array.from(atob(data.content.replace(/\n/g,'')),c=>c.charCodeAt(0));
+    return new TextDecoder('utf-8').decode(bytes);
+  }
+  return data.content||'';
+}
+
+async function downloadBlob(sha,fileName){
+  // Use Git Blob API for authenticated binary download
+  const res=await apiFetch(`https://api.github.com/repos/${state.owner}/${state.repo}/git/blobs/${sha}`);
+  const data=await res.json();
+  const binary=atob(data.content.replace(/\n/g,''));
+  const bytes=new Uint8Array(binary.length);
+  for(let i=0;i<binary.length;i++)bytes[i]=binary.charCodeAt(i);
+  const blob=new Blob([bytes]);
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;a.download=fileName;document.body.appendChild(a);a.click();
+  document.body.removeChild(a);URL.revokeObjectURL(url);
+  toast(`${fileName} をダウンロードしました`);
+}
+
+async function getRecentCommits(){
+  const key='recent-commits';
+  if(state.cache[key])return state.cache[key];
+  const res=await apiFetch(`https://api.github.com/repos/${state.owner}/${state.repo}/commits?sha=${state.branch}&per_page=10`);
+  const data=await res.json();
+  state.cache[key]=data;
+  return data;
+}
+
+// === File helpers ===
+function getFileIcon(item){
+  if(item.type==='dir')return '📁';
+  const ext=(item.name||'').split('.').pop().toLowerCase();
+  const icons={md:'📝',html:'🌐',pptx:'📊',pdf:'📕',js:'⚡',json:'📋',yaml:'⚙',yml:'⚙',png:'🖼',jpg:'🖼',svg:'🎨',css:'🎨',txt:'📄',log:'📜',bat:'🖥',sh:'🖥'};
+  return icons[ext]||'📄';
+}
+function getFileExt(name){return(name||'').split('.').pop().toLowerCase()}
+function getBadgeClass(name){
+  const ext=getFileExt(name);
+  const map={md:'badge-md',html:'badge-html',pptx:'badge-pptx',pdf:'badge-pdf',js:'badge-js',yaml:'badge-yaml',yml:'badge-yaml'};
+  return map[ext]||'badge-other';
+}
+function formatSize(bytes){
+  if(!bytes)return '';
+  if(bytes<1024)return bytes+' B';
+  if(bytes<1048576)return(bytes/1024).toFixed(1)+' KB';
+  return(bytes/1048576).toFixed(1)+' MB';
+}
+function isFavorite(path){return state.favorites.includes(path)}
+function toggleFavorite(path,e){
+  if(e)e.stopPropagation();
+  const idx=state.favorites.indexOf(path);
+  if(idx>=0)state.favorites.splice(idx,1);else state.favorites.push(path);
+  saveFavorites();
+  toast(idx>=0?'お気に入りから削除':'お気に入りに追加');
+  if(state.currentTab==='favorites')showFavorites();
+}
+
+// === Tab switching ===
+function switchTab(tab){
+  state.currentTab=tab;
+  document.querySelectorAll('.nav-tab').forEach(t=>t.classList.toggle('active',t.dataset.tab===tab));
+  $('browse-tab').style.display=tab==='browse'?'block':'none';
+
+  fileList.style.display='none';
+  $('recent-list').style.display='none';
+  $('favorites-list').style.display='none';
+  viewer.style.display='none';
+
+  if(tab==='browse'){navigate(state.path)}
+  else if(tab==='recent'){loadRecent()}
+  else if(tab==='favorites'){showFavorites()}
+}
+
+// === Recent commits ===
+async function loadRecent(){
+  showLoading();
+  try{
+    const commits=await getRecentCommits();
+    hideLoading();
+    const list=$('recent-list');
+    list.style.display='block';
+    if(!commits.length){
+      list.innerHTML='<div class="empty-state"><div class="icon">📭</div><p>コミット履歴がありません</p></div>';
+      return;
+    }
+    list.innerHTML=commits.map(c=>{
+      const date=new Date(c.commit.author.date);
+      const timeStr=`${date.getMonth()+1}/${date.getDate()} ${date.getHours()}:${String(date.getMinutes()).padStart(2,'0')}`;
+      const msg=c.commit.message.split('\n')[0];
+      return `<div class="commit-item">
+        <div class="commit-msg">${msg.length>60?msg.slice(0,60)+'...':msg}</div>
+        <div class="commit-meta">${timeStr} · ${c.sha.slice(0,7)}</div>
+      </div>`;
+    }).join('');
+  }catch(err){
+    hideLoading();
+    $('recent-list').style.display='block';
+    $('recent-list').innerHTML=`<div class="empty-state"><div class="icon">⚠️</div><p>${err.message}</p></div>`;
+  }
+}
+
+// === Favorites ===
+function showFavorites(){
+  const list=$('favorites-list');
+  list.style.display='block';
+  if(!state.favorites.length){
+    list.innerHTML='<div class="empty-state"><div class="icon">⭐</div><p>お気に入りはまだありません<br>ファイル一覧で ⭐ をタップして追加</p></div>';
+    return;
+  }
+  list.innerHTML='<div class="file-list">'+state.favorites.map(path=>{
+    const name=path.split('/').pop();
+    const icon=getFileIcon({name,type:'file'});
+    const badge=`<span class="badge ${getBadgeClass(name)}">${getFileExt(name)}</span>`;
+    return `<div class="file-item" onclick="openFile('${path}')">
+      <div class="file-icon">${icon}</div>
+      <div class="file-info">
+        <div class="file-name">${name} ${badge}</div>
+        <div class="file-meta">${path}</div>
+      </div>
+      <button class="fav-btn active" onclick="toggleFavorite('${path}',event)">⭐</button>
+    </div>`;
+  }).join('')+'</div>';
+}
+
+// === Navigation ===
+function showLoading(){loading.classList.add('show');fileList.style.display='none';viewer.style.display='none';$('recent-list').style.display='none';$('favorites-list').style.display='none'}
+function hideLoading(){loading.classList.remove('show')}
+
+function updateBreadcrumb(path){
+  const parts=path?path.split('/'):[];
+  let html='<span class="crumb" onclick="navigate(\'\')">🏠</span>';
+  let cumPath='';
+  parts.forEach((part,i)=>{
+    cumPath+=((cumPath?'/':'')+part);
+    const isLast=i===parts.length-1;
+    html+=`<span class="crumb-sep">›</span>`;
+    if(isLast){html+=`<span class="crumb current">${part}</span>`}
+    else{const p=cumPath;html+=`<span class="crumb" onclick="navigate('${p}')">${part}</span>`}
+  });
+  breadcrumb.innerHTML=html;
+  breadcrumb.scrollLeft=breadcrumb.scrollWidth;
+}
+
+async function navigate(path){
+  state.path=path;state.searchQuery='';searchInput.value='';
+  updateBreadcrumb(path);showLoading();
+  try{
+    const data=await getContents(path);
+    hideLoading();
+    if(Array.isArray(data)){showFileList(data)}
+    else{await showFile(data)}
+  }catch(err){
+    hideLoading();fileList.style.display='block';viewer.style.display='none';
+    if(err.message.includes('認証')){
+      fileList.innerHTML=`<div class="empty-state"><div class="icon">🔒</div><p>認証エラー<br><button class="btn-primary" style="width:auto;margin-top:12px;padding:8px 24px" onclick="showAuthScreen()">トークンを設定</button></p></div>`;
+    }else{
+      fileList.innerHTML=`<div class="empty-state"><div class="icon">⚠️</div><p>${err.message}</p></div>`;
+    }
+  }
+}
+
+function showFileList(items){
+  fileList.style.display='block';viewer.style.display='none';
+  items.sort((a,b)=>{
+    if(a.type==='dir'&&b.type!=='dir')return -1;
+    if(a.type!=='dir'&&b.type==='dir')return 1;
+    return a.name.localeCompare(b.name,'ja');
+  });
+  let filtered=items;
+  if(state.searchQuery){
+    const q=state.searchQuery.toLowerCase();
+    filtered=items.filter(item=>item.name.toLowerCase().includes(q));
+  }
+  if(!filtered.length){
+    fileList.innerHTML=`<div class="empty-state"><div class="icon">📭</div><p>ファイルが見つかりません</p></div>`;return;
+  }
+  fileList.innerHTML=filtered.map(item=>{
+    const icon=getFileIcon(item);
+    const meta=item.type==='dir'?'フォルダ':`${getFileExt(item.name).toUpperCase()}${item.size?' · '+formatSize(item.size):''}`;
+    const badge=item.type!=='dir'?`<span class="badge ${getBadgeClass(item.name)}">${getFileExt(item.name)}</span>`:'';
+    const favClass=item.type!=='dir'&&isFavorite(item.path)?'active':'';
+    const favBtn=item.type!=='dir'?`<button class="fav-btn ${favClass}" onclick="toggleFavorite('${item.path}',event)">${isFavorite(item.path)?'⭐':'☆'}</button>`:'';
+    // Escape single quotes in paths for onclick
+    const safePath=item.path.replace(/'/g,"\\'");
+    return `<div class="file-item" onclick="handleItemClick('${safePath}','${item.type}')">
+      <div class="file-icon">${icon}</div>
+      <div class="file-info">
+        <div class="file-name">${item.name} ${badge}</div>
+        <div class="file-meta">${meta}</div>
+      </div>
+      <div class="file-actions">${favBtn}<div class="file-arrow">${item.type==='dir'?'›':''}</div></div>
+    </div>`;
+  }).join('');
+}
+
+function handleItemClick(path,type){
+  state.history.push({path:state.path,tab:state.currentTab});
+  if(type==='dir'){navigate(path)}else{openFile(path)}
+}
+
+async function openFile(path){
+  state.currentTab='browse';
+  document.querySelectorAll('.nav-tab').forEach(t=>t.classList.toggle('active',t.dataset.tab==='browse'));
+  $('browse-tab').style.display='block';
+  updateBreadcrumb(path);showLoading();
+
+  const ext=getFileExt(path);
+  const textExts=['md','txt','js','json','yaml','yml','css','html','log','bat','sh','py','ts','tsx','jsx','mjs','csv','xml','svg','toml','cfg','ini','env'];
+  const previewableAsHtml=['html','htm'];
+
+  try{
+    if(textExts.includes(ext)){
+      const content=await getFileContent(path);
+      hideLoading();
+      fileList.style.display='none';$('recent-list').style.display='none';$('favorites-list').style.display='none';
+      viewer.style.display='block';backBtn.style.display='flex';
+      htmlFrame.style.display='none';binaryViewer.style.display='none';
+
+      if(ext==='md'){
+        mdViewer.style.display='block';
+        mdViewer.innerHTML=marked.parse(content);
+      }else if(previewableAsHtml.includes(ext)){
+        mdViewer.style.display='none';
+        htmlFrame.style.display='block';
+        htmlFrame.srcdoc=content;
+      }else{
+        mdViewer.style.display='block';
+        mdViewer.innerHTML=`<pre><code>${content.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</code></pre>`;
+      }
+    }else{
+      // Binary file - get SHA for Blob API download
+      const res=await apiFetch(`https://api.github.com/repos/${state.owner}/${state.repo}/contents/${encodeURIComponent(path).replace(/%2F/g,'/')}?ref=${state.branch}`);
+      const data=await res.json();
+      hideLoading();
+      fileList.style.display='none';$('recent-list').style.display='none';$('favorites-list').style.display='none';
+      viewer.style.display='block';backBtn.style.display='flex';
+      mdViewer.style.display='none';htmlFrame.style.display='none';binaryViewer.style.display='block';
+
+      const fileName=path.split('/').pop();
+      const icon=getFileIcon({name:fileName,type:'file'});
+      const sha=data.sha;
+
+      binaryViewer.innerHTML=`
+        <div style="text-align:center;padding:40px 20px">
+          <div style="font-size:64px;margin-bottom:16px">${icon}</div>
+          <h3 style="margin-bottom:8px">${fileName}</h3>
+          <p style="color:var(--text3);margin-bottom:8px;font-size:14px">${ext.toUpperCase()} · ${formatSize(data.size)}</p>
+          <button class="download-btn" onclick="downloadBlob('${sha}','${fileName.replace(/'/g,"\\'")}')">📥 ダウンロード</button>
+        </div>`;
+    }
+  }catch(err){
+    hideLoading();fileList.style.display='block';viewer.style.display='none';
+    fileList.innerHTML=`<div class="empty-state"><div class="icon">⚠️</div><p>ファイルの読み込みに失敗<br>${err.message}</p></div>`;
+  }
+}
+
+function goBack(){
+  const prev=state.history.pop();
+  viewer.style.display='none';backBtn.style.display='none';
+  if(prev){
+    switchTab(prev.tab||'browse');
+    if(prev.tab==='browse'||!prev.tab)navigate(prev.path||'');
+  }else{navigate('')}
+}
+backBtn.onclick=goBack;
+
+// === Search ===
+let searchTimer;
+searchInput.addEventListener('input',e=>{
+  clearTimeout(searchTimer);
+  searchTimer=setTimeout(()=>{
+    state.searchQuery=e.target.value;
+    const key=`contents:${state.path}`;
+    if(state.cache[key]){const data=state.cache[key];if(Array.isArray(data))showFileList(data)}
+  },200);
+});
+
+// === Gestures ===
+let touchStartX=0;
+document.addEventListener('touchstart',e=>{touchStartX=e.touches[0].clientX},{passive:true});
+document.addEventListener('touchend',e=>{
+  const dx=e.changedTouches[0].clientX-touchStartX;
+  if(dx>100&&touchStartX<40){goBack()}
+},{passive:true});
+window.addEventListener('popstate',()=>{goBack()});
+
+// === Service Worker ===
+if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(()=>{})}
+
+// === Init ===
+loadFavorites();
+if(loadConfig()&&state.token){
+  navigate('');
+}else{
+  showAuthScreen();
+}
+</script>
+</body>
+</html>
