@@ -1,4 +1,5 @@
-const CACHE_NAME = 'agent-viewer-v1';
+// Bumping version invalidates all old caches on activation
+const CACHE_NAME = 'agent-viewer-v3';
 const STATIC_ASSETS = ['./index.html', './manifest.json'];
 
 self.addEventListener('install', event => {
@@ -20,13 +21,16 @@ self.addEventListener('activate', event => {
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
 
-  // Network-first for API calls
-  if (url.hostname === 'api.github.com') {
+  // Network-first strategy: always try network, fall back to cache when offline.
+  // This ensures users see updates as soon as they're deployed.
+  if (url.origin === location.origin || url.hostname === 'api.github.com') {
     event.respondWith(
       fetch(event.request)
         .then(res => {
-          const clone = res.clone();
-          caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+          if (res.ok) {
+            const clone = res.clone();
+            caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+          }
           return res;
         })
         .catch(() => caches.match(event.request))
@@ -34,8 +38,11 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // Cache-first for static assets
-  event.respondWith(
-    caches.match(event.request).then(cached => cached || fetch(event.request))
-  );
+  // Pass-through for anything else (raw.githubusercontent.com etc.)
+  event.respondWith(fetch(event.request).catch(() => caches.match(event.request)));
+});
+
+// Allow the page to request an immediate update
+self.addEventListener('message', event => {
+  if (event.data === 'SKIP_WAITING') self.skipWaiting();
 });

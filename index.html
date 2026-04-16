@@ -906,7 +906,26 @@ window.addEventListener('popstate',()=>{
 });
 
 // === Service Worker ===
-if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(()=>{})}
+if('serviceWorker' in navigator){
+  navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(reg=>{
+    // Check for updates on each load
+    reg.update().catch(()=>{});
+    reg.addEventListener('updatefound',()=>{
+      const sw=reg.installing;
+      if(!sw)return;
+      sw.addEventListener('statechange',()=>{
+        if(sw.state==='installed'&&navigator.serviceWorker.controller){
+          // New version available - reload to apply
+          sw.postMessage('SKIP_WAITING');
+        }
+      });
+    });
+    let reloaded=false;
+    navigator.serviceWorker.addEventListener('controllerchange',()=>{
+      if(reloaded)return;reloaded=true;location.reload();
+    });
+  }).catch(()=>{});
+}
 
 // === Init ===
 loadFavorites();
