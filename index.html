@@ -77,9 +77,13 @@ header h1 span{color:var(--accent)}
 .file-meta{font-size:12px;color:var(--text3);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .file-actions{display:flex;gap:4px;flex-shrink:0;align-items:center}
 .file-arrow{color:var(--text3);font-size:14px;flex-shrink:0}
-.fav-btn{background:var(--bg2);border:1px solid var(--border);font-size:18px;cursor:pointer;padding:6px 10px;border-radius:8px;color:var(--text3);transition:all .15s;min-width:40px;line-height:1}
-.fav-btn:active{transform:scale(.9)}
+.fav-btn,.copy-btn{background:var(--bg2);border:1px solid var(--border);font-size:18px;cursor:pointer;padding:6px 10px;border-radius:8px;color:var(--text3);transition:all .15s;min-width:40px;line-height:1}
+.fav-btn:active,.copy-btn:active{transform:scale(.9)}
 .fav-btn.active{background:rgba(251,191,36,.15);border-color:#fbbf24;color:#fbbf24}
+.copy-btn:active{background:rgba(129,140,248,.15);border-color:var(--accent);color:var(--accent)}
+.file-item.longpress-active{background:var(--bg2);outline:2px solid var(--accent);outline-offset:-2px}
+.breadcrumb-copy{background:none;border:none;color:var(--text3);font-size:14px;cursor:pointer;padding:4px 8px;border-radius:6px;flex-shrink:0;transition:all .15s;margin-left:auto}
+.breadcrumb-copy:active{color:var(--accent);transform:scale(.9)}
 
 /* Recent commit items */
 .commit-item{padding:12px 16px;border-bottom:1px solid var(--border)}
@@ -152,9 +156,11 @@ header h1 span{color:var(--accent)}
 .empty-state p{font-size:14px;line-height:1.6}
 
 /* Back/viewer toolbar */
-#viewer-toolbar{position:sticky;top:0;background:var(--bg);border-bottom:1px solid var(--border);display:none;align-items:center;justify-content:space-between;padding:6px 8px;z-index:5;-webkit-user-select:none}
-#back-btn{display:flex;align-items:center;gap:4px;cursor:pointer;font-size:14px;color:var(--accent);padding:8px 12px;border-radius:8px;background:none;border:none}
+#viewer-toolbar{position:sticky;top:0;background:var(--bg);border-bottom:1px solid var(--border);display:none;align-items:center;padding:6px 8px;z-index:5;-webkit-user-select:none;gap:4px}
+#back-btn{display:flex;align-items:center;gap:4px;cursor:pointer;font-size:14px;color:var(--accent);padding:8px 12px;border-radius:8px;background:none;border:none;margin-right:auto}
 #back-btn:active{background:var(--bg2)}
+#copy-path-btn{background:none;border:none;font-size:18px;cursor:pointer;padding:6px 12px;border-radius:8px;color:var(--text3);transition:transform .2s}
+#copy-path-btn:active{transform:scale(.85);color:var(--accent)}
 #fav-toggle{background:none;border:none;font-size:22px;cursor:pointer;padding:6px 12px;border-radius:8px;transition:transform .2s}
 #fav-toggle:active{transform:scale(.85)}
 #fav-toggle.active{color:#fbbf24;text-shadow:0 0 8px rgba(251,191,36,.4)}
@@ -226,6 +232,7 @@ header h1 span{color:var(--accent)}
     <div id="viewer" style="display:none">
       <div id="viewer-toolbar">
         <button id="back-btn">← 戻る</button>
+        <button id="copy-path-btn" title="パスをコピー" onclick="if(state.currentFile)copyPath(state.currentFile)">📋</button>
         <button id="fav-toggle" title="お気に入り">☆</button>
       </div>
       <div id="md-viewer"></div>
@@ -327,6 +334,20 @@ const authScreen=$('auth-screen');const connStatus=$('conn-status');
 
 // === Toast ===
 function toast(msg){const t=$('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2000)}
+
+// === Copy Path ===
+function copyPath(path,e){
+  if(e)e.stopPropagation();
+  navigator.clipboard.writeText(path).then(()=>{
+    toast('📋 コピー: '+path);
+  }).catch(()=>{
+    const ta=document.createElement('textarea');
+    ta.value=path;ta.style.position='fixed';ta.style.opacity='0';
+    document.body.appendChild(ta);ta.select();document.execCommand('copy');
+    document.body.removeChild(ta);
+    toast('📋 コピー: '+path);
+  });
+}
 
 // === Config ===
 function loadConfig(){
@@ -574,6 +595,7 @@ function showFavorites(){
         <div class="file-name">${name} ${badge}</div>
         <div class="file-meta">${path}</div>
       </div>
+      <button class="copy-btn" onclick="copyPath('${safePath}',event)" aria-label="パスをコピー">📋</button>
       <button class="fav-btn active" onclick="toggleFavorite('${safePath}',event)" aria-label="お気に入り解除">★</button>
     </div>`;
   }).join('')+'</div>';
@@ -594,6 +616,7 @@ function updateBreadcrumb(path){
     if(isLast){html+=`<span class="crumb current">${part}</span>`}
     else{const p=cumPath;html+=`<span class="crumb" onclick="navToCrumb('${p}')">${part}</span>`}
   });
+  if(path){html+=`<button class="breadcrumb-copy" onclick="copyPath('${path.replace(/'/g,"\\'")}',event)" title="現在のパスをコピー">📋</button>`}
   breadcrumb.innerHTML=html;
   breadcrumb.scrollLeft=breadcrumb.scrollWidth;
 }
@@ -639,13 +662,14 @@ function showFileList(items){
     const favBtn=item.type!=='dir'?`<button class="fav-btn ${fav?'active':''}" onclick="toggleFavorite('${item.path.replace(/'/g,"\\'")}',event)" aria-label="お気に入り">${fav?'★':'☆'}</button>`:'';
     // Escape single quotes in paths for onclick
     const safePath=item.path.replace(/'/g,"\\'");
-    return `<div class="file-item" onclick="handleItemClick('${safePath}','${item.type}')">
+    const copyBtn=`<button class="copy-btn" onclick="copyPath('${safePath}',event)" aria-label="パスをコピー" title="${item.path}">📋</button>`;
+    return `<div class="file-item" data-path="${item.path}" data-type="${item.type}" onclick="handleItemClick('${safePath}','${item.type}')">
       <div class="file-icon">${icon}</div>
       <div class="file-info">
         <div class="file-name">${item.name} ${badge}</div>
         <div class="file-meta">${meta}</div>
       </div>
-      <div class="file-actions">${favBtn}<div class="file-arrow">${item.type==='dir'?'›':''}</div></div>
+      <div class="file-actions">${copyBtn}${favBtn}<div class="file-arrow">${item.type==='dir'?'›':''}</div></div>
     </div>`;
   }).join('');
 }
@@ -929,6 +953,7 @@ function renderSearchResults(query,res){
             <div class="file-name">${escapeHtml(item.name)} ${badge}</div>
             <div class="file-meta">${escapeHtml(item.path)}</div>
           </div>
+          <button class="copy-btn" onclick="copyPath('${safePath}',event)" aria-label="パスをコピー">📋</button>
           <button class="fav-btn ${fav?'active':''}" onclick="toggleFavorite('${safePath}',event)" aria-label="お気に入り">${fav?'★':'☆'}</button>
         </div>`;
       }).join('');
@@ -950,6 +975,7 @@ function renderSearchResults(query,res){
               <div class="file-name">${escapeHtml(item.name)} ${badge}</div>
               <div class="file-meta">${escapeHtml(item.path)}</div>
             </div>
+            <button class="copy-btn" onclick="copyPath('${safePath}',event)" aria-label="パスをコピー">📋</button>
             <button class="fav-btn ${fav?'active':''}" onclick="toggleFavorite('${safePath}',event)" aria-label="お気に入り">${fav?'★':'☆'}</button>
           </div>
           ${snippet}
@@ -1076,6 +1102,35 @@ document.addEventListener('visibilitychange',()=>{
     }
     moved=0;
   },{passive:true});
+})();
+
+// Long-press to copy path (event delegation on file-list)
+(function setupLongPress(){
+  let timer=null,activeEl=null,didLongPress=false;
+  const DELAY=500;
+  function clear(){
+    if(timer)clearTimeout(timer);timer=null;
+    if(activeEl)activeEl.classList.remove('longpress-active');
+    activeEl=null;
+  }
+  fileList.addEventListener('touchstart',e=>{
+    const item=e.target.closest('.file-item[data-path]');
+    if(!item||e.target.closest('.copy-btn,.fav-btn'))return;
+    didLongPress=false;activeEl=item;
+    timer=setTimeout(()=>{
+      didLongPress=true;
+      item.classList.add('longpress-active');
+      copyPath(item.dataset.path);
+      setTimeout(()=>item.classList.remove('longpress-active'),300);
+      if(navigator.vibrate)navigator.vibrate(30);
+    },DELAY);
+  },{passive:true});
+  fileList.addEventListener('touchmove',()=>{clear();},{passive:true});
+  fileList.addEventListener('touchend',e=>{
+    clear();
+    if(didLongPress){e.preventDefault();didLongPress=false}
+  });
+  fileList.addEventListener('touchcancel',()=>{clear();},{passive:true});
 })();
 
 // === Service Worker ===
