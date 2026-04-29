@@ -333,7 +333,8 @@ const searchResults=$('search-results');const searchScopeEl=$('search-scope');
 const authScreen=$('auth-screen');const connStatus=$('conn-status');
 
 // === Toast ===
-function toast(msg){const t=$('toast');t.textContent=msg;t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2000)}
+let _toastTimer;
+function toast(msg){const t=$('toast');t.textContent=msg;t.classList.add('show');clearTimeout(_toastTimer);_toastTimer=setTimeout(()=>t.classList.remove('show'),2000)}
 
 // === Copy Path ===
 function copyPath(path,e){
