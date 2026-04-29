@@ -504,7 +504,7 @@ favToggle.onclick=()=>{if(state.currentFile)toggleFavorite(state.currentFile)};
 // === Tab switching ===
 function switchTab(tab,fromBack=false){
   if(!fromBack&&tab!==state.currentTab){
-    state.history.push({path:state.path,tab:state.currentTab});
+    state.history.push({path:state.path,tab:state.currentTab,scrollTop:$('content').scrollTop});
     history.pushState({nav:true},'');
   }
   state.currentTab=tab;
@@ -651,17 +651,17 @@ function showFileList(items){
 }
 
 function handleItemClick(path,type){
-  state.history.push({path:state.path,tab:state.currentTab});
+  state.history.push({path:state.path,tab:state.currentTab,scrollTop:$('content').scrollTop});
   history.pushState({nav:true},'');
   if(type==='dir'){navigate(path)}else{openFile(path)}
 }
 function navToFile(path){
-  state.history.push({path:state.path,tab:state.currentTab});
+  state.history.push({path:state.path,tab:state.currentTab,scrollTop:$('content').scrollTop});
   history.pushState({nav:true},'');
   openFile(path);
 }
 function navToCrumb(path){
-  state.history.push({path:state.path,tab:state.currentTab});
+  state.history.push({path:state.path,tab:state.currentTab,scrollTop:$('content').scrollTop});
   history.pushState({nav:true},'');
   navigate(path);
 }
@@ -723,11 +723,12 @@ async function openFile(path){
   }
 }
 
-function restoreView(prev){
+async function restoreView(prev){
   viewer.style.display='none';viewerToolbar.style.display='none';
   state.currentFile=null;
   searchResults.style.display='none';
   searchInput.value='';state.searchQuery='';
+  const savedScroll=prev?prev.scrollTop||0:0;
   if(prev){
     const targetTab=prev.tab||'browse';
     state.currentTab=targetTab;
@@ -736,10 +737,11 @@ function restoreView(prev){
     fileList.style.display='none';
     $('recent-list').style.display='none';
     $('favorites-list').style.display='none';
-    if(targetTab==='browse')navigate(prev.path||'');
-    else if(targetTab==='recent')loadRecent();
+    if(targetTab==='browse')await navigate(prev.path||'');
+    else if(targetTab==='recent')await loadRecent();
     else if(targetTab==='favorites')showFavorites();
-  }else{navigate('')}
+  }else{await navigate('')}
+  requestAnimationFrame(()=>{$('content').scrollTop=savedScroll});
 }
 // Back button uses browser history (fires popstate)
 backBtn.onclick=()=>{
@@ -989,6 +991,7 @@ let refreshing=false;
 async function refresh(showToast=true){
   if(refreshing)return;
   refreshing=true;
+  const savedScroll=$('content').scrollTop;
   const btn=$('refresh-btn');
   btn.classList.add('spinning');
   // Invalidate all caches
@@ -1006,6 +1009,7 @@ async function refresh(showToast=true){
     }else{
       await navigate(state.path||'');
     }
+    requestAnimationFrame(()=>{$('content').scrollTop=savedScroll});
     if(showToast)toast('✓ 最新状態に更新');
   }catch(err){
     toast('更新失敗: '+err.message);
