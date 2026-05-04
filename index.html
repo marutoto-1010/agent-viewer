@@ -309,7 +309,7 @@ if(line.startsWith('>')){let bq='';while(i<lines.length&&lines[i].startsWith('>'
 if(/^[\s]*[-*+]\s/.test(line)){let items='';while(i<lines.length&&/^[\s]*[-*+]\s/.test(lines[i])){items+=`<li>${parseInline(lines[i].replace(/^[\s]*[-*+]\s/,''))}</li>`;i++}html+=`<ul>${items}</ul>`;continue}
 if(/^\d+\.\s/.test(line)){let items='';while(i<lines.length&&/^\d+\.\s/.test(lines[i])){items+=`<li>${parseInline(lines[i].replace(/^\d+\.\s/,''))}</li>`;i++}html+=`<ol>${items}</ol>`;continue}
 if(!line.trim()){i++;continue}
-let p='';while(i<lines.length&&lines[i].trim()&&!lines[i].startsWith('#')&&!lines[i].startsWith('```')&&!lines[i].startsWith('>')&&!/^[-*+]\s/.test(lines[i])&&!/^\d+\.\s/.test(lines[i])){p+=lines[i]+' ';i++}
+let p='';while(i<lines.length&&lines[i].trim()&&!/^#{1,6}\s/.test(lines[i])&&!lines[i].startsWith('```')&&!lines[i].startsWith('>')&&!/^[-*+]\s/.test(lines[i])&&!/^\d+\.\s/.test(lines[i])){p+=lines[i]+' ';i++}
 if(p)html+=`<p>${parseInline(p.trim())}</p>`}
 return html}
 return{parse}})();
