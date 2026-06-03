@@ -298,7 +298,9 @@ function parseInline(src){return src
 .replace(/`([^`]+)`/g,'<code>$1</code>')
 .replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>')
 .replace(/\*(.+?)\*/g,'<em>$1</em>')
-.replace(/\[([^\]]+)\]\(([^)]+)\)/g,'<a href="$2" target="_blank" rel="noopener">$1</a>')}
+.replace(/\[\[([^\]]+)\]\]\(([^)]+)\)/g,'<a href="$2" target="_blank" rel="noopener">[$1]</a>')
+.replace(/\[([^\]]+)\]\(([^)]+)\)/g,'<a href="$2" target="_blank" rel="noopener">$1</a>')
+.replace(/(?<!["\/\w])(https?:\/\/[A-Za-z0-9\-._~:\/?#\[\]@!$&'()*+,;=%]+)/g,m=>{const t=(m.match(/[.,;:!?)\]'"]+$/)||[''])[0];const u=m.slice(0,m.length-t.length);return '<a href="'+u+'" target="_blank" rel="noopener">'+u+'</a>'+t})}
 function parse(md){
 const lines=md.split('\n');let html='',i=0;
 while(i<lines.length){
