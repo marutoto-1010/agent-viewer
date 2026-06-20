@@ -94,7 +94,8 @@ header h1 span{color:var(--accent)}
 .commit-file:active{opacity:.7}
 
 /* Markdown viewer */
-#md-viewer{padding:20px 16px;line-height:1.7;font-size:15px;max-width:100%}
+#md-viewer{padding:20px 16px;line-height:1.7;font-size:15px;max-width:100%;flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch}
+#binary-viewer{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch}
 #md-viewer h1{font-size:22px;font-weight:700;margin:24px 0 12px;color:var(--text);border-bottom:1px solid var(--border);padding-bottom:8px}
 #md-viewer h2{font-size:19px;font-weight:600;margin:20px 0 10px;color:var(--text)}
 #md-viewer h3{font-size:16px;font-weight:600;margin:16px 0 8px;color:var(--text)}
@@ -113,8 +114,28 @@ header h1 span{color:var(--accent)}
 #md-viewer img{max-width:100%;border-radius:8px;margin:8px 0}
 #md-viewer hr{border:none;border-top:1px solid var(--border);margin:16px 0}
 
-/* HTML preview iframe */
-#html-frame{width:100%;height:100%;border:none;background:#fff}
+/* Viewer wrapper: flex column so iframe can stretch full height.
+   JS toggles display via inline style ('flex' / 'none'). */
+#viewer{flex-direction:column;height:100%;min-height:0}
+
+/* HTML preview iframe: fill remaining height inside flex viewer */
+#html-frame{width:100%;flex:1;min-height:0;border:none;background:#fff}
+
+/* Hide search-bar while viewing a file (always) */
+body.viewing-file #search-bar,
+body.viewing-file #search-scope{display:none}
+
+/* Fullscreen mode: hide chrome to maximize preview area (only while viewing) */
+body.viewing-file.fullscreen-mode header,
+body.viewing-file.fullscreen-mode #tab-nav,
+body.viewing-file.fullscreen-mode #breadcrumb,
+body.viewing-file.fullscreen-mode #search-bar,
+body.viewing-file.fullscreen-mode #search-scope,
+body.viewing-file.fullscreen-mode #settings-btn{display:none !important}
+
+#fullscreen-toggle{background:none;border:none;font-size:18px;cursor:pointer;padding:6px 12px;border-radius:8px;color:var(--text3);transition:transform .2s}
+#fullscreen-toggle:active{transform:scale(.85);color:var(--accent)}
+body.fullscreen-mode #fullscreen-toggle{color:var(--accent)}
 
 /* Loading */
 #loading{display:none;justify-content:center;align-items:center;padding:60px;flex-direction:column;gap:12px}
@@ -235,6 +256,7 @@ header h1 span{color:var(--accent)}
       <div id="viewer-toolbar">
         <button id="back-btn">← 戻る</button>
         <button id="copy-path-btn" title="パスをコピー" onclick="if(state.currentFile)copyPath(state.currentFile)">📋</button>
+        <button id="fullscreen-toggle" title="全画面（ヘッダー非表示）" onclick="toggleFullscreen()">⛶</button>
         <button id="fav-toggle" title="お気に入り">☆</button>
       </div>
       <div id="md-viewer"></div>
@@ -569,7 +591,7 @@ function switchTab(tab,fromBack=false){
   $('recent-list').style.display='none';
   $('favorites-list').style.display='none';
   $('history-list').style.display='none';
-  viewer.style.display='none';viewerToolbar.style.display='none';
+  viewer.style.display='none';viewerToolbar.style.display='none';document.body.classList.remove('viewing-file','fullscreen-mode');
   state.currentFile=null;
 
   if(tab==='browse'){navigate(state.path)}
@@ -672,7 +694,7 @@ function clearViewHistory(){
 }
 
 // === Navigation ===
-function showLoading(){loading.classList.add('show');fileList.style.display='none';viewer.style.display='none';viewerToolbar.style.display='none';$('recent-list').style.display='none';$('favorites-list').style.display='none';$('history-list').style.display='none';searchResults.style.display='none'}
+function showLoading(){loading.classList.add('show');fileList.style.display='none';viewer.style.display='none';viewerToolbar.style.display='none';document.body.classList.remove('viewing-file','fullscreen-mode');$('recent-list').style.display='none';$('favorites-list').style.display='none';$('history-list').style.display='none';searchResults.style.display='none'}
 function hideLoading(){loading.classList.remove('show')}
 
 function updateBreadcrumb(path){
@@ -700,7 +722,7 @@ async function navigate(path){
     if(Array.isArray(data)){showFileList(data)}
     else{await showFile(data)}
   }catch(err){
-    hideLoading();fileList.style.display='block';viewer.style.display='none';
+    hideLoading();fileList.style.display='block';viewer.style.display='none';document.body.classList.remove('viewing-file','fullscreen-mode');
     if(err.message.includes('認証')){
       fileList.innerHTML=`<div class="empty-state"><div class="icon">🔒</div><p>認証エラー<br><button class="btn-primary" style="width:auto;margin-top:12px;padding:8px 24px" onclick="showAuthScreen()">トークンを設定</button></p></div>`;
     }else{
@@ -710,7 +732,7 @@ async function navigate(path){
 }
 
 function showFileList(items){
-  fileList.style.display='block';viewer.style.display='none';
+  fileList.style.display='block';viewer.style.display='none';document.body.classList.remove('viewing-file','fullscreen-mode');
   items.sort((a,b)=>{
     if(a.type==='dir'&&b.type!=='dir')return -1;
     if(a.type!=='dir'&&b.type==='dir')return 1;
@@ -777,7 +799,7 @@ async function openFile(path){
       const content=await getFileContent(path);
       hideLoading();
       fileList.style.display='none';$('recent-list').style.display='none';$('favorites-list').style.display='none';$('history-list').style.display='none';
-      viewer.style.display='block';viewerToolbar.style.display='flex';
+      viewer.style.display='flex';viewerToolbar.style.display='flex';document.body.classList.add('viewing-file');
       htmlFrame.style.display='none';binaryViewer.style.display='none';
 
       if(ext==='md'){
@@ -797,7 +819,7 @@ async function openFile(path){
       const data=await res.json();
       hideLoading();
       fileList.style.display='none';$('recent-list').style.display='none';$('favorites-list').style.display='none';$('history-list').style.display='none';
-      viewer.style.display='block';viewerToolbar.style.display='flex';
+      viewer.style.display='flex';viewerToolbar.style.display='flex';document.body.classList.add('viewing-file');
       mdViewer.style.display='none';htmlFrame.style.display='none';binaryViewer.style.display='block';
 
       const fileName=path.split('/').pop();
@@ -813,13 +835,13 @@ async function openFile(path){
         </div>`;
     }
   }catch(err){
-    hideLoading();fileList.style.display='block';viewer.style.display='none';
+    hideLoading();fileList.style.display='block';viewer.style.display='none';document.body.classList.remove('viewing-file','fullscreen-mode');
     fileList.innerHTML=`<div class="empty-state"><div class="icon">⚠️</div><p>ファイルの読み込みに失敗<br>${err.message}</p></div>`;
   }
 }
 
 async function restoreView(prev){
-  viewer.style.display='none';viewerToolbar.style.display='none';
+  viewer.style.display='none';viewerToolbar.style.display='none';document.body.classList.remove('viewing-file','fullscreen-mode');
   state.currentFile=null;
   searchResults.style.display='none';
   searchInput.value='';state.searchQuery='';
@@ -842,9 +864,21 @@ async function restoreView(prev){
 }
 // Back button uses browser history (fires popstate)
 backBtn.onclick=()=>{
+  document.body.classList.remove('fullscreen-mode');
   if(state.history.length>0)history.back();
-  else{viewer.style.display='none';viewerToolbar.style.display='none';state.currentFile=null;navigate('')}
+  else{viewer.style.display='none';viewerToolbar.style.display='none';document.body.classList.remove('viewing-file','fullscreen-mode');state.currentFile=null;navigate('')}
 };
+
+// Fullscreen toggle: hides header/tabs/breadcrumb to maximize file preview
+function toggleFullscreen(){
+  document.body.classList.toggle('fullscreen-mode');
+}
+// ESC to exit fullscreen
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape'&&document.body.classList.contains('fullscreen-mode')){
+    document.body.classList.remove('fullscreen-mode');
+  }
+});
 
 // === Search ===
 function setSearchScope(scope){
@@ -879,7 +913,7 @@ async function runSearch(query){
   $('recent-list').style.display='none';
   $('favorites-list').style.display='none';
   $('history-list').style.display='none';
-  viewer.style.display='none';viewerToolbar.style.display='none';
+  viewer.style.display='none';viewerToolbar.style.display='none';document.body.classList.remove('viewing-file','fullscreen-mode');
   searchResults.style.display='block';
   searchResults.innerHTML=`<div style="padding:40px;text-align:center"><div class="spinner" style="margin:0 auto"></div><div class="loading-text" style="margin-top:12px">検索中...</div></div>`;
 
