@@ -160,6 +160,9 @@ body.viewing-file.fullscreen-mode #settings-btn{display:none !important}
 #fullscreen-toggle{background:none;border:none;font-size:18px;cursor:pointer;padding:6px 12px;border-radius:8px;color:var(--text3);transition:transform .2s}
 #fullscreen-toggle:active{transform:scale(.85);color:var(--accent)}
 body.fullscreen-mode #fullscreen-toggle{color:var(--accent)}
+#download-current-btn{background:none;border:none;font-size:20px;cursor:pointer;padding:6px 12px;border-radius:8px;color:var(--text3);transition:transform .2s;font-weight:600}
+#download-current-btn:active{transform:scale(.85);color:var(--accent)}
+#download-current-btn:disabled{opacity:.3;cursor:not-allowed}
 
 /* Loading */
 #loading{display:none;justify-content:center;align-items:center;padding:60px;flex-direction:column;gap:12px}
@@ -280,6 +283,7 @@ body.fullscreen-mode #fullscreen-toggle{color:var(--accent)}
       <div id="viewer-toolbar">
         <button id="back-btn">← 戻る</button>
         <button id="copy-path-btn" title="パスをコピー" onclick="if(state.currentFile)copyPath(state.currentFile)">📋</button>
+        <button id="download-current-btn" title="このファイルをダウンロード" onclick="downloadCurrentFile()">⤓</button>
         <button id="fullscreen-toggle" title="全画面（ヘッダー非表示）" onclick="toggleFullscreen()">⛶</button>
         <button id="fav-toggle" title="お気に入り">☆</button>
       </div>
@@ -513,11 +517,14 @@ async function getContents(path){
 async function getFileContent(path){
   const res=await apiFetch(`https://api.github.com/repos/${state.owner}/${state.repo}/contents/${encodeURIComponent(path).replace(/%2F/g,'/')}?ref=${state.branch}`);
   const data=await res.json();
+  let content;
   if(data.encoding==='base64'){
     const bytes=Uint8Array.from(atob(data.content.replace(/\n/g,'')),c=>c.charCodeAt(0));
-    return new TextDecoder('utf-8').decode(bytes);
+    content=new TextDecoder('utf-8').decode(bytes);
+  }else{
+    content=data.content||'';
   }
-  return data.content||'';
+  return {content,sha:data.sha,size:data.size};
 }
 
 async function downloadBlob(sha,fileName){
@@ -963,9 +970,14 @@ async function openFile(path){
     mdViewer.style.display='none';htmlFrame.style.display='none';binaryViewer.style.display='none';richViewer.style.display='none';
   };
 
+  const fileName=path.split('/').pop();
+  state.currentFileName=fileName;
+  state.currentFileSha=null;
+
   try{
     if(textExts.includes(ext)){
-      const content=await getFileContent(path);
+      const {content,sha}=await getFileContent(path);
+      state.currentFileSha=sha;
       hideLoading();
       showViewerShell();
 
@@ -983,20 +995,20 @@ async function openFile(path){
       // Rich preview: PDF / XLSX / DOCX / Image
       const res=await apiFetch(`https://api.github.com/repos/${state.owner}/${state.repo}/contents/${encodeURIComponent(path).replace(/%2F/g,'/')}?ref=${state.branch}`);
       const data=await res.json();
+      state.currentFileSha=data.sha;
       hideLoading();
       showViewerShell();
       richViewer.style.display='block';
-      const fileName=path.split('/').pop();
       await tryRichPreview(ext,data.sha,fileName);
     }else{
       // Binary file - get SHA for Blob API download
       const res=await apiFetch(`https://api.github.com/repos/${state.owner}/${state.repo}/contents/${encodeURIComponent(path).replace(/%2F/g,'/')}?ref=${state.branch}`);
       const data=await res.json();
+      state.currentFileSha=data.sha;
       hideLoading();
       showViewerShell();
       binaryViewer.style.display='block';
 
-      const fileName=path.split('/').pop();
       const icon=getFileIcon({name:fileName,type:'file'});
       const sha=data.sha;
 
@@ -1008,6 +1020,7 @@ async function openFile(path){
           <button class="download-btn" onclick="downloadBlob('${sha}','${fileName.replace(/'/g,"\\'")}')">📥 ダウンロード</button>
         </div>`;
     }
+    updateDownloadBtn();
   }catch(err){
     hideLoading();fileList.style.display='block';viewer.style.display='none';document.body.classList.remove('viewing-file','fullscreen-mode');
     fileList.innerHTML=`<div class="empty-state"><div class="icon">⚠️</div><p>ファイルの読み込みに失敗<br>${err.message}</p></div>`;
@@ -1042,6 +1055,20 @@ backBtn.onclick=()=>{
   if(state.history.length>0)history.back();
   else{viewer.style.display='none';viewerToolbar.style.display='none';document.body.classList.remove('viewing-file','fullscreen-mode');state.currentFile=null;navigate('')}
 };
+
+// Update download button state based on currentFile
+function updateDownloadBtn(){
+  const btn=$('download-current-btn');
+  if(!btn)return;
+  btn.disabled=!state.currentFileSha;
+}
+// Download currently-viewed file
+function downloadCurrentFile(){
+  if(!state.currentFileSha||!state.currentFileName){
+    toast('ダウンロードできるファイルがありません');return;
+  }
+  downloadBlob(state.currentFileSha,state.currentFileName);
+}
 
 // Fullscreen toggle: hides header/tabs/breadcrumb to maximize file preview
 function toggleFullscreen(){
