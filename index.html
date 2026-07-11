@@ -803,7 +803,7 @@ favToggle.onclick=()=>{if(state.currentFile)toggleFavorite(state.currentFile)};
 // === Tab switching ===
 function switchTab(tab,fromBack=false){
   if(!fromBack&&tab!==state.currentTab){
-    state.history.push({path:state.path,tab:state.currentTab,scrollTop:$('content').scrollTop});
+    state.history.push({path:state.path,tab:state.currentTab,scrollTop:activeScroller().scrollTop});
     history.pushState({nav:true},'');
   }
   state.currentTab=tab;
@@ -995,17 +995,17 @@ function showFileList(items){
 }
 
 function handleItemClick(path,type){
-  state.history.push({path:state.path,tab:state.currentTab,scrollTop:$('content').scrollTop});
+  state.history.push({path:state.path,tab:state.currentTab,scrollTop:activeScroller().scrollTop});
   history.pushState({nav:true},'');
   if(type==='dir'){navigate(path)}else{openFile(path)}
 }
 function navToFile(path){
-  state.history.push({path:state.path,tab:state.currentTab,scrollTop:$('content').scrollTop});
+  state.history.push({path:state.path,tab:state.currentTab,scrollTop:activeScroller().scrollTop});
   history.pushState({nav:true},'');
   openFile(path);
 }
 function navToCrumb(path){
-  state.history.push({path:state.path,tab:state.currentTab,scrollTop:$('content').scrollTop});
+  state.history.push({path:state.path,tab:state.currentTab,scrollTop:activeScroller().scrollTop});
   history.pushState({nav:true},'');
   navigate(path);
 }
@@ -1111,7 +1111,10 @@ async function restoreView(prev){
     else if(targetTab==='favorites')showFavorites();
     else if(targetTab==='history')showViewHistory();
   }else{await navigate('')}
-  requestAnimationFrame(()=>{$('content').scrollTop=savedScroll});
+  requestAnimationFrame(()=>requestAnimationFrame(()=>{
+    const el=activeScroller();
+    if(el)el.scrollTop=savedScroll;
+  }));
 }
 // Back button uses browser history (fires popstate)
 backBtn.onclick=()=>{
@@ -1390,7 +1393,9 @@ let refreshing=false;
 async function refresh(showToast=true){
   if(refreshing)return;
   refreshing=true;
-  const savedScroll=$('content').scrollTop;
+  const savedEl=activeScroller();
+  const savedScroll=savedEl?savedEl.scrollTop:0;
+  const savedScrollerId=savedEl?savedEl.id:'content';
   const btn=$('refresh-btn');
   btn.classList.add('spinning');
   // Invalidate all caches
@@ -1410,7 +1415,10 @@ async function refresh(showToast=true){
     }else{
       await navigate(state.path||'');
     }
-    requestAnimationFrame(()=>{$('content').scrollTop=savedScroll});
+    requestAnimationFrame(()=>requestAnimationFrame(()=>{
+      const el=document.getElementById(savedScrollerId)||activeScroller();
+      if(el)el.scrollTop=savedScroll;
+    }));
     if(showToast)toast('✓ 最新状態に更新');
   }catch(err){
     toast('更新失敗: '+err.message);
@@ -1437,6 +1445,78 @@ mdViewer.addEventListener('toggle',()=>{
   if($('fold-toggle').style.display!=='none')updateFoldToggle();
 },true);
 
+// === Active scroller helper (shared by scroll-top FAB, snapshot, refresh, popstate) ===
+// Determine which container is currently the active scroller
+function activeScroller(){
+  // Prefer an inner viewer that is visible and has actual scroll height
+  for(const id of ['md-viewer','binary-viewer','rich-viewer']){
+    const el=document.getElementById(id);
+    if(el&&el.offsetParent!==null&&el.scrollHeight>el.clientHeight) return el;
+  }
+  return document.getElementById('content');
+}
+
+// === View snapshot (survives browser reload via sessionStorage) ===
+const SNAPSHOT_KEY='agent-viewer-last-view';
+function saveViewSnapshot(){
+  try{
+    // Skip while auth screen is showing (nothing meaningful to restore)
+    if(!state.token)return;
+    const el=activeScroller();
+    const snap={
+      path:state.path||'',
+      currentFile:state.currentFile||null,
+      currentTab:state.currentTab||'browse',
+      searchQuery:state.searchQuery||'',
+      scrollTop:el?el.scrollTop:0,
+      scrollerId:el?el.id:'content',
+      ts:Date.now()
+    };
+    sessionStorage.setItem(SNAPSHOT_KEY,JSON.stringify(snap));
+  }catch(_){}
+}
+function loadViewSnapshot(){
+  try{
+    const raw=sessionStorage.getItem(SNAPSHOT_KEY);
+    return raw?JSON.parse(raw):null;
+  }catch(_){return null}
+}
+async function restoreFromSnapshot(snap){
+  try{
+    const targetTab=snap.currentTab||'browse';
+    state.currentTab=targetTab;
+    document.querySelectorAll('.nav-tab').forEach(t=>t.classList.toggle('active',t.dataset.tab===targetTab));
+    $('browse-tab').style.display=targetTab==='browse'?'block':'none';
+
+    if(snap.currentFile){
+      // Load parent list first so the back button returns to the right place,
+      // then open the file
+      await navigate(snap.path||'');
+      await openFile(snap.currentFile);
+    }else if(targetTab==='browse'){
+      await navigate(snap.path||'');
+      if(snap.searchQuery){
+        searchInput.value=snap.searchQuery;
+        await runSearch(snap.searchQuery);
+      }
+    }else if(targetTab==='recent'){
+      await loadRecent();
+    }else if(targetTab==='favorites'){
+      showFavorites();
+    }else if(targetTab==='history'){
+      showViewHistory();
+    }
+
+    // Restore scroll after render — double rAF ensures layout settled
+    requestAnimationFrame(()=>requestAnimationFrame(()=>{
+      const el=document.getElementById(snap.scrollerId)||activeScroller();
+      if(el&&snap.scrollTop){el.scrollTop=snap.scrollTop}
+    }));
+  }catch(err){
+    await navigate('');
+  }
+}
+
 // Scroll-to-top FAB: show when any scroll container is past threshold
 (function setupScrollTopBtn(){
   const btn=$('scroll-top-btn');
@@ -1445,15 +1525,6 @@ mdViewer.addEventListener('toggle',()=>{
   // list/search uses #content. Watch all of them.
   const targets=['content','md-viewer','binary-viewer','rich-viewer']
     .map(id=>document.getElementById(id)).filter(Boolean);
-  // Determine which container is currently the active scroller
-  function activeScroller(){
-    // Prefer an inner viewer that is visible and has actual scroll height
-    for(const id of ['md-viewer','binary-viewer','rich-viewer']){
-      const el=document.getElementById(id);
-      if(el&&el.offsetParent!==null&&el.scrollHeight>el.clientHeight) return el;
-    }
-    return document.getElementById('content');
-  }
   let ticking=false;
   function update(){
     const el=activeScroller();
@@ -1466,12 +1537,28 @@ mdViewer.addEventListener('toggle',()=>{
     ticking=true;
     requestAnimationFrame(update);
   }
-  targets.forEach(el=>el.addEventListener('scroll',onScroll,{passive:true}));
+  // Snapshot save on scroll (debounced) — keeps sessionStorage current for reload
+  let snapTimer=null;
+  function onScrollForSnapshot(){
+    if(snapTimer)clearTimeout(snapTimer);
+    snapTimer=setTimeout(saveViewSnapshot,300);
+  }
+  targets.forEach(el=>{
+    el.addEventListener('scroll',onScroll,{passive:true});
+    el.addEventListener('scroll',onScrollForSnapshot,{passive:true});
+  });
   btn.addEventListener('click',()=>{
     const el=activeScroller();
     if(el)el.scrollTo({top:0,behavior:'smooth'});
   });
 })();
+
+// Persist view snapshot on browser reload / tab hide (covers F5, PWA reload, mobile Safari)
+window.addEventListener('beforeunload',saveViewSnapshot);
+window.addEventListener('pagehide',saveViewSnapshot);
+document.addEventListener('visibilitychange',()=>{
+  if(document.visibilityState==='hidden')saveViewSnapshot();
+});
 
 // Long-press to copy path (event delegation on file-list)
 (function setupLongPress(){
@@ -1530,7 +1617,12 @@ loadViewHistory();
 // Anchor initial history entry (prevents first swipe-back from closing PWA)
 history.replaceState({nav:false,root:true},'');
 if(loadConfig()&&state.token){
-  navigate('');
+  const snap=loadViewSnapshot();
+  if(snap){
+    restoreFromSnapshot(snap);
+  }else{
+    navigate('');
+  }
 }else{
   showAuthScreen();
 }
