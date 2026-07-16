@@ -445,6 +445,39 @@ function toggleAllSections(){
   const anyOpen=secs.some(d=>d.open);
   secs.forEach(d=>{if(anyOpen)d.removeAttribute('open');else d.setAttribute('open','')});
   updateFoldToggle();
+  if(state.currentFile)saveSectionState(state.currentFile);
+}
+
+// Persist H2 section open/closed state per file across reloads
+const SECTION_STATE_KEY='agent-viewer-section-state';
+const SECTION_STATE_MAX_FILES=200;
+function _sectionKey(det,i){
+  const h=det.querySelector('summary.md-sec-head h2');
+  return (h?h.textContent.trim():'')+'#'+i;
+}
+function loadSectionState(path){
+  try{const all=JSON.parse(localStorage.getItem(SECTION_STATE_KEY)||'{}');return all[path]||null}catch{return null}
+}
+function saveSectionState(path){
+  if(!path)return;
+  const secs=[...mdViewer.querySelectorAll('details.md-sec')];
+  if(!secs.length)return;
+  try{
+    const all=JSON.parse(localStorage.getItem(SECTION_STATE_KEY)||'{}');
+    const map={};secs.forEach((d,i)=>{map[_sectionKey(d,i)]=d.open});
+    all[path]=map;
+    const keys=Object.keys(all);
+    if(keys.length>SECTION_STATE_MAX_FILES){for(let k=0;k<keys.length-SECTION_STATE_MAX_FILES;k++)delete all[keys[k]]}
+    localStorage.setItem(SECTION_STATE_KEY,JSON.stringify(all));
+  }catch{}
+}
+function applySectionState(path){
+  const map=loadSectionState(path);if(!map)return;
+  const secs=[...mdViewer.querySelectorAll('details.md-sec')];
+  secs.forEach((d,i)=>{
+    const key=_sectionKey(d,i);
+    if(key in map){if(map[key])d.setAttribute('open','');else d.removeAttribute('open')}
+  });
 }
 
 // === Toast ===
@@ -1046,6 +1079,7 @@ async function openFile(path){
         mdViewer.style.display='block';
         mdViewer.innerHTML='';
         mdViewer.appendChild(sectionizeMd(marked.parse(content)));
+        applySectionState(path);
         mdViewer.scrollTop=0;
         updateFoldToggle();
       }else if(previewableAsHtml.includes(ext)){
@@ -1441,8 +1475,9 @@ document.addEventListener('visibilitychange',()=>{
 });
 
 // Keep fold-toggle icon in sync when user opens/closes individual sections
-mdViewer.addEventListener('toggle',()=>{
+mdViewer.addEventListener('toggle',e=>{
   if($('fold-toggle').style.display!=='none')updateFoldToggle();
+  if(state.currentFile&&e.target instanceof HTMLDetailsElement&&e.target.classList.contains('md-sec'))saveSectionState(state.currentFile);
 },true);
 
 // === Active scroller helper (shared by scroll-top FAB, snapshot, refresh, popstate) ===
