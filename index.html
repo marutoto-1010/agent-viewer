@@ -81,6 +81,13 @@ header h1 span{color:var(--accent)}
 .breadcrumb-copy{background:none;border:none;color:var(--text3);font-size:14px;cursor:pointer;padding:4px 8px;border-radius:6px;flex-shrink:0;transition:all .15s;margin-left:auto}
 .breadcrumb-copy:active{color:var(--accent);transform:scale(.9)}
 
+/* Recent filter bar */
+.recent-filter-bar{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 16px;border-bottom:1px solid var(--border);font-size:13px;color:var(--text2);flex-wrap:wrap}
+.recent-filter-bar label{display:flex;align-items:center;gap:6px;cursor:pointer;-webkit-user-select:none;user-select:none}
+.recent-filter-bar input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent);cursor:pointer}
+.recent-filter-bar .recent-count{font-size:12px;color:var(--text3)}
+.recent-filter-bar .filter-hint{font-size:11px;color:var(--text3);cursor:pointer;text-decoration:underline}
+
 /* Recent commit items */
 .commit-item{padding:12px 16px;border-bottom:1px solid var(--border)}
 .commit-msg{font-size:14px;color:var(--text);margin-bottom:4px}
@@ -391,7 +398,8 @@ const state={
   owner:'',repo:'',branch:'main',token:'',
   path:'',cache:{},searchQuery:'',history:[],
   currentTab:'browse',favorites:[],viewHistory:[],
-  currentFile:null,searchScope:'all',searchTimer:null
+  currentFile:null,searchScope:'all',searchTimer:null,
+  recentShowAll:false
 };
 
 // === DOM helpers ===
@@ -514,6 +522,11 @@ function loadViewHistory(){
   if(h)state.viewHistory=JSON.parse(h);
 }
 function saveViewHistory(){localStorage.setItem('agent-viewer-history',JSON.stringify(state.viewHistory))}
+function loadRecentShowAll(){
+  const v=localStorage.getItem('agent-viewer-recent-show-all');
+  if(v!==null)state.recentShowAll=v==='1';
+}
+function saveRecentShowAll(){localStorage.setItem('agent-viewer-recent-show-all',state.recentShowAll?'1':'0')}
 function addToViewHistory(path){
   const ext=getFileExt(path);
   state.viewHistory=state.viewHistory.filter(e=>e.path!==path);
@@ -771,6 +784,21 @@ async function tryRichPreview(ext,sha,fileName){
   return false;
 }
 
+// 設定・運用ステート系ファイルの判定（作成物クイックアクセス導線のノイズ除去）
+const CONFIG_EXT_SET=new Set(['json','yaml','yml','lock','sh','bat','ps1','vbs','cmd','log','gitignore','gitattributes','env']);
+const KEEP_BASENAMES=new Set(['README.md','CLAUDE.md','MEMORY.md','AGENTS.md','changelog.md','CHANGELOG.md']);
+function isConfigLikePath(path){
+  if(!path)return false;
+  const base=path.split('/').pop()||'';
+  if(KEEP_BASENAMES.has(base))return false;
+  if(base.startsWith('.'))return true; // .env, .gitignore, .mototoru-*.json 等
+  if(/(^|\/)\.[^/]+\//.test(path))return true; // .claude/, .slack-plans/, .tmp/ 等
+  if(/^(scripts|tools)\//.test(path))return true; // 運用スクリプト・ツール
+  const ext=base.split('.').pop().toLowerCase();
+  if(CONFIG_EXT_SET.has(ext))return true;
+  return false;
+}
+
 async function getRecentFiles(){
   const key='recent-files';
   if(state.cache[key])return state.cache[key];
@@ -862,38 +890,57 @@ function switchTab(tab,fromBack=false){
 }
 
 // === Recent files ===
+function toggleRecentShowAll(checked){
+  state.recentShowAll=!!checked;
+  saveRecentShowAll();
+  renderRecent();
+}
 async function loadRecent(){
   showLoading();
   try{
     const files=await getRecentFiles();
     hideLoading();
-    const list=$('recent-list');
-    list.style.display='block';
-    if(!files.length){
-      list.innerHTML='<div class="empty-state"><div class="icon">📭</div><p>最近更新されたファイルがありません</p></div>';
-      return;
-    }
-    const statusLabel={added:'新規',modified:'変更',removed:'削除',renamed:'名前変更'};
-    list.innerHTML='<div class="file-list">'+files.map(f=>{
-      const date=new Date(f.date);
-      const timeStr=`${date.getMonth()+1}/${date.getDate()} ${date.getHours()}:${String(date.getMinutes()).padStart(2,'0')}`;
-      const icon=getFileIcon({name:f.name,type:'file'});
-      const badge=statusLabel[f.status]||f.status;
-      const msg=f.msg.length>40?f.msg.slice(0,40)+'...':f.msg;
-      return `<div class="file-item" onclick="openFile('${f.path.replace(/'/g,"\\'")}')">
-        <div class="file-icon">${icon}</div>
-        <div class="file-info">
-          <div class="file-name">${f.name}</div>
-          <div class="file-meta">${timeStr} · ${badge} · ${msg}</div>
-        </div>
-        <div class="file-arrow">›</div>
-      </div>`;
-    }).join('')+'</div>';
+    renderRecent(files);
   }catch(err){
     hideLoading();
     $('recent-list').style.display='block';
     $('recent-list').innerHTML=`<div class="empty-state"><div class="icon">⚠️</div><p>${err.message}</p></div>`;
   }
+}
+function renderRecent(files){
+  const list=$('recent-list');
+  list.style.display='block';
+  const key='recent-files';
+  const all=files||state.cache[key]||[];
+  const shown=state.recentShowAll?all:all.filter(f=>!isConfigLikePath(f.path));
+  const filterBar=`<div class="recent-filter-bar">
+    <label><input type="checkbox" id="recent-show-all" ${state.recentShowAll?'checked':''} onchange="toggleRecentShowAll(this.checked)"> 設定ファイルも表示</label>
+    <span class="recent-count">表示中: ${shown.length}件 / 全 ${all.length}件</span>
+  </div>`;
+  if(!all.length){
+    list.innerHTML=filterBar+'<div class="empty-state"><div class="icon">📭</div><p>最近更新されたファイルがありません</p></div>';
+    return;
+  }
+  if(!shown.length){
+    list.innerHTML=filterBar+`<div class="empty-state"><div class="icon">⚙️</div><p>設定ファイルのみ更新されています<br><span class="filter-hint" onclick="toggleRecentShowAll(true)">全て表示に切替</span></p></div>`;
+    return;
+  }
+  const statusLabel={added:'新規',modified:'変更',removed:'削除',renamed:'名前変更'};
+  list.innerHTML=filterBar+'<div class="file-list">'+shown.map(f=>{
+    const date=new Date(f.date);
+    const timeStr=`${date.getMonth()+1}/${date.getDate()} ${date.getHours()}:${String(date.getMinutes()).padStart(2,'0')}`;
+    const icon=getFileIcon({name:f.name,type:'file'});
+    const badge=statusLabel[f.status]||f.status;
+    const msg=f.msg.length>40?f.msg.slice(0,40)+'...':f.msg;
+    return `<div class="file-item" onclick="openFile('${f.path.replace(/'/g,"\\'")}')">
+      <div class="file-icon">${icon}</div>
+      <div class="file-info">
+        <div class="file-name">${f.name}</div>
+        <div class="file-meta">${timeStr} · ${badge} · ${msg}</div>
+      </div>
+      <div class="file-arrow">›</div>
+    </div>`;
+  }).join('')+'</div>';
 }
 
 // === Favorites ===
@@ -1649,6 +1696,7 @@ if('serviceWorker' in navigator){
 // === Init ===
 loadFavorites();
 loadViewHistory();
+loadRecentShowAll();
 // Anchor initial history entry (prevents first swipe-back from closing PWA)
 history.replaceState({nav:false,root:true},'');
 if(loadConfig()&&state.token){
