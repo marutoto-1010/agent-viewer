@@ -1,5 +1,5 @@
 // Bumping version invalidates all old caches on activation
-const CACHE_NAME = 'agent-viewer-v12';
+const CACHE_NAME = 'agent-viewer-v13';
 const STATIC_ASSETS = ['./index.html', './manifest.json'];
 
 self.addEventListener('install', event => {

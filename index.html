@@ -384,7 +384,7 @@ function parse(md){
 const lines=md.split('\n');let html='',i=0;
 while(i<lines.length){
 const line=lines[i];
-if(line.startsWith('```')){const lang=line.slice(3).trim();let code='';i++;while(i<lines.length&&!lines[i].startsWith('```')){code+=(lang==='mermaid'?lines[i]:escape(lines[i]))+'\n';i++}html+=(lang==='mermaid'?`<div class="mermaid">${code}</div>`:`<pre><code class="language-${lang}">${code}</code></pre>`);i++;continue}
+if(line.startsWith('```')){const lang=line.slice(3).trim();let code='';i++;while(i<lines.length&&!lines[i].startsWith('```')){code+=escape(lines[i])+'\n';i++}html+=(lang==='mermaid'?`<div class="mermaid">${code}</div>`:`<pre><code class="language-${lang}">${code}</code></pre>`);i++;continue}
 if(/^<details(\s|>)/i.test(line.trim())){let depth=0,block=[];do{const l=lines[i];depth+=(l.match(/<details(\s|>)/gi)||[]).length;depth-=(l.match(/<\/details>/gi)||[]).length;block.push(l);i++}while(i<lines.length&&depth>0);const raw=block.join('\n');const m=raw.match(/^\s*<details([^>]*)>([\s\S]*)<\/details>\s*$/i);if(m){let inner=m[2],summaryHtml='';const sm=inner.match(/^\s*<summary>([\s\S]*?)<\/summary>/i);if(sm){summaryHtml=`<summary>${parseInline(sm[1].trim())}</summary>`;inner=inner.slice(sm.index+sm[0].length)}html+=`<details${m[1]}>${summaryHtml}${parse(inner)}</details>`}else{html+=raw}continue}
 const hm=line.match(/^(#{1,6})\s+(.+)/);if(hm){html+=`<h${hm[1].length}>${parseInline(hm[2])}</h${hm[1].length}>`;i++;continue}
 if(/^(-{3,}|\*{3,}|_{3,})$/.test(line.trim())){html+='<hr>';i++;continue}
