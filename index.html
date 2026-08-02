@@ -132,10 +132,14 @@ header h1 span{color:var(--accent)}
 #md-viewer code{background:var(--bg3);padding:2px 6px;border-radius:4px;font-size:13px;font-family:'SF Mono',Monaco,Consolas,monospace}
 #md-viewer pre{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:14px;overflow-x:auto;margin:12px 0}
 #md-viewer pre code{background:none;padding:0;font-size:13px}
-#md-viewer .mermaid{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:12px;margin:12px 0;overflow-x:auto;display:flex;justify-content:center;min-height:60px}
+/* Diagrams render at natural size (see mermaid.initialize useMaxWidth:false) and scroll
+   horizontally. Deliberately NOT justify-content:center: when the child is wider than the
+   flex container, centering pushes its left edge out of reach of the scrollbar. The svg
+   uses margin:auto instead, which centers only when there is room to spare. */
+#md-viewer .mermaid{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:12px;margin:12px 0;overflow-x:auto;display:flex;min-height:60px}
 #md-viewer .mermaid[data-mermaid-processed="pending"]{color:var(--text3);font-family:'SF Mono',Monaco,Consolas,monospace;font-size:12px;white-space:pre;justify-content:flex-start;text-align:left;opacity:.5}
 #md-viewer .mermaid[data-mermaid-processed="error"]{flex-direction:column;justify-content:flex-start;align-items:stretch}
-#md-viewer .mermaid svg{max-width:100%;height:auto}
+#md-viewer .mermaid svg{max-width:none;height:auto;margin:auto;flex-shrink:0}
 #md-viewer .mermaid-error{color:var(--red);font-size:13px;padding:4px 0 10px;font-weight:600}
 #md-viewer a{color:var(--accent);text-decoration:none}
 #md-viewer a:hover{text-decoration:underline}
@@ -178,11 +182,34 @@ body.viewing-file.fullscreen-mode #tab-nav,
 body.viewing-file.fullscreen-mode #breadcrumb,
 body.viewing-file.fullscreen-mode #search-bar,
 body.viewing-file.fullscreen-mode #search-scope,
-body.viewing-file.fullscreen-mode #scroll-top-btn{display:none !important}
+body.viewing-file.fullscreen-mode #scroll-top-btn,
+body.viewing-file.landscape-mode header,
+body.viewing-file.landscape-mode #tab-nav,
+body.viewing-file.landscape-mode #breadcrumb,
+body.viewing-file.landscape-mode #search-bar,
+body.viewing-file.landscape-mode #search-scope,
+body.viewing-file.landscape-mode #scroll-top-btn{display:none !important}
 
 #fullscreen-toggle{background:none;border:none;font-size:18px;cursor:pointer;padding:6px 12px;border-radius:8px;color:var(--text3);transition:transform .2s}
 #fullscreen-toggle:active{transform:scale(.85);color:var(--accent)}
 body.fullscreen-mode #fullscreen-toggle{color:var(--accent)}
+
+/* Landscape mode: rotate the viewer 90deg so wide diagrams get the long screen edge.
+   Works regardless of the OS rotation lock, which is why we don't rely on the Screen
+   Orientation API alone (iOS has no support for it, Android needs rotation lock off).
+   Only #viewer is rotated -- the position:fixed chrome stays put and is hidden above.
+   width/height are swapped (100dvh/100dvw) so the rotated box covers the viewport;
+   rotate+translateY(-100%) about the top-left corner lands it back at the origin. */
+body.viewing-file.landscape-mode #viewer{
+  position:fixed;top:0;left:0;z-index:30;background:var(--bg);
+  width:100vh;height:100vw;
+  width:100dvh;height:100dvw;
+  transform:rotate(90deg) translateY(-100%);
+  transform-origin:top left;
+}
+#landscape-toggle{background:none;border:none;font-size:18px;cursor:pointer;padding:6px 12px;border-radius:8px;color:var(--text3);transition:transform .2s}
+#landscape-toggle:active{transform:scale(.85);color:var(--accent)}
+body.landscape-mode #landscape-toggle{color:var(--accent)}
 #download-current-btn{background:none;border:none;font-size:20px;cursor:pointer;padding:6px 12px;border-radius:8px;color:var(--text3);transition:transform .2s;font-weight:600}
 #download-current-btn:active{transform:scale(.85);color:var(--accent)}
 #download-current-btn:disabled{opacity:.3;cursor:not-allowed}
@@ -313,6 +340,7 @@ body.fullscreen-mode #fullscreen-toggle{color:var(--accent)}
         <button id="download-current-btn" title="このファイルをダウンロード" onclick="downloadCurrentFile()">⤓</button>
         <button id="fold-toggle" title="セクションを全て開閉" onclick="toggleAllSections()" style="display:none">⊟</button>
         <button id="fullscreen-toggle" title="全画面（ヘッダー非表示）" onclick="toggleFullscreen()">⛶</button>
+        <button id="landscape-toggle" title="横向き表示（図を大きく見る）" onclick="toggleLandscape()">🔄</button>
         <button id="fav-toggle" title="お気に入り">☆</button>
       </div>
       <div id="md-viewer"></div>
@@ -411,7 +439,15 @@ function loadMermaid(){
     s.crossOrigin='anonymous';
     s.onload=()=>{
       try{
-        window.mermaid.initialize({startOnLoad:false,theme:'dark',securityLevel:'strict',fontFamily:'inherit',flowchart:{htmlLabels:true,useMaxWidth:true}});
+        // useMaxWidth:false renders diagrams at their natural size instead of shrinking
+        // them into the phone's narrow viewport (text became unreadable). The .mermaid
+        // wrapper scrolls horizontally, so wide diagrams stay legible at 1:1.
+        window.mermaid.initialize({startOnLoad:false,theme:'dark',securityLevel:'strict',fontFamily:'inherit',
+          flowchart:{htmlLabels:true,useMaxWidth:false},
+          sequence:{useMaxWidth:false},gantt:{useMaxWidth:false},class:{useMaxWidth:false},
+          state:{useMaxWidth:false},er:{useMaxWidth:false},journey:{useMaxWidth:false},
+          pie:{useMaxWidth:false},mindmap:{useMaxWidth:false},timeline:{useMaxWidth:false},
+          gitGraph:{useMaxWidth:false},quadrantChart:{useMaxWidth:false},xyChart:{useMaxWidth:false}});
         resolve(window.mermaid);
       }catch(e){reject(e)}
     };
@@ -935,7 +971,7 @@ function switchTab(tab,fromBack=false){
   $('recent-list').style.display='none';
   $('favorites-list').style.display='none';
   $('history-list').style.display='none';
-  viewer.style.display='none';viewerToolbar.style.display='none';document.body.classList.remove('viewing-file','fullscreen-mode');
+  viewer.style.display='none';viewerToolbar.style.display='none';resetViewModes();
   state.currentFile=null;
 
   if(tab==='browse'){navigate(state.path)}
@@ -1057,7 +1093,7 @@ function clearViewHistory(){
 }
 
 // === Navigation ===
-function showLoading(){loading.classList.add('show');fileList.style.display='none';viewer.style.display='none';viewerToolbar.style.display='none';document.body.classList.remove('viewing-file','fullscreen-mode');$('recent-list').style.display='none';$('favorites-list').style.display='none';$('history-list').style.display='none';searchResults.style.display='none'}
+function showLoading(){loading.classList.add('show');fileList.style.display='none';viewer.style.display='none';viewerToolbar.style.display='none';resetViewModes();$('recent-list').style.display='none';$('favorites-list').style.display='none';$('history-list').style.display='none';searchResults.style.display='none'}
 function hideLoading(){loading.classList.remove('show')}
 
 function updateBreadcrumb(path){
@@ -1085,7 +1121,7 @@ async function navigate(path){
     if(Array.isArray(data)){showFileList(data)}
     else{await showFile(data)}
   }catch(err){
-    hideLoading();fileList.style.display='block';viewer.style.display='none';document.body.classList.remove('viewing-file','fullscreen-mode');
+    hideLoading();fileList.style.display='block';viewer.style.display='none';resetViewModes();
     if(err.message.includes('認証')){
       fileList.innerHTML=`<div class="empty-state"><div class="icon">🔒</div><p>認証エラー<br><button class="btn-primary" style="width:auto;margin-top:12px;padding:8px 24px" onclick="showAuthScreen()">トークンを設定</button></p></div>`;
     }else{
@@ -1095,7 +1131,7 @@ async function navigate(path){
 }
 
 function showFileList(items){
-  fileList.style.display='block';viewer.style.display='none';document.body.classList.remove('viewing-file','fullscreen-mode');
+  fileList.style.display='block';viewer.style.display='none';resetViewModes();
   items.sort((a,b)=>{
     if(a.type==='dir'&&b.type!=='dir')return -1;
     if(a.type!=='dir'&&b.type==='dir')return 1;
@@ -1223,13 +1259,13 @@ async function openFile(path){
     }
     updateDownloadBtn();
   }catch(err){
-    hideLoading();fileList.style.display='block';viewer.style.display='none';document.body.classList.remove('viewing-file','fullscreen-mode');
+    hideLoading();fileList.style.display='block';viewer.style.display='none';resetViewModes();
     fileList.innerHTML=`<div class="empty-state"><div class="icon">⚠️</div><p>ファイルの読み込みに失敗<br>${err.message}</p></div>`;
   }
 }
 
 async function restoreView(prev){
-  viewer.style.display='none';viewerToolbar.style.display='none';document.body.classList.remove('viewing-file','fullscreen-mode');
+  viewer.style.display='none';viewerToolbar.style.display='none';resetViewModes();
   state.currentFile=null;
   searchResults.style.display='none';
   searchInput.value='';state.searchQuery='';
@@ -1255,9 +1291,9 @@ async function restoreView(prev){
 }
 // Back button uses browser history (fires popstate)
 backBtn.onclick=()=>{
-  document.body.classList.remove('fullscreen-mode');
+  document.body.classList.remove('fullscreen-mode','landscape-mode');
   if(state.history.length>0)history.back();
-  else{viewer.style.display='none';viewerToolbar.style.display='none';document.body.classList.remove('viewing-file','fullscreen-mode');state.currentFile=null;navigate('')}
+  else{viewer.style.display='none';viewerToolbar.style.display='none';resetViewModes();state.currentFile=null;navigate('')}
 };
 
 // Update download button state based on currentFile
@@ -1278,11 +1314,31 @@ function downloadCurrentFile(){
 function toggleFullscreen(){
   document.body.classList.toggle('fullscreen-mode');
 }
-// ESC to exit fullscreen
+
+// Leaving a file drops every view mode so the next file opens in the default portrait view.
+function resetViewModes(){
+  document.body.classList.remove('viewing-file','fullscreen-mode','landscape-mode');
+  try{if(screen.orientation&&screen.orientation.unlock)screen.orientation.unlock()}catch(e){}
+}
+
+// Landscape toggle: CSS-rotates the viewer so wide mermaid diagrams get the long edge.
+// The CSS rotation is the part that actually works everywhere; the Screen Orientation API
+// call below is a bonus for Android Chrome (needs fullscreen + rotation lock off) and is
+// expected to reject on iOS, so every failure path is swallowed.
+function toggleLandscape(){
+  const on=document.body.classList.toggle('landscape-mode');
+  try{
+    const o=screen.orientation;
+    if(!o)return;
+    if(on&&o.lock)o.lock('landscape').catch(()=>{});
+    else if(!on&&o.unlock)o.unlock();
+  }catch(e){/* unsupported: CSS rotation already did the job */}
+}
+// ESC to exit fullscreen / landscape
 document.addEventListener('keydown',e=>{
-  if(e.key==='Escape'&&document.body.classList.contains('fullscreen-mode')){
-    document.body.classList.remove('fullscreen-mode');
-  }
+  if(e.key!=='Escape')return;
+  if(document.body.classList.contains('landscape-mode'))toggleLandscape();
+  else if(document.body.classList.contains('fullscreen-mode'))document.body.classList.remove('fullscreen-mode');
 });
 
 // === Search ===
@@ -1318,7 +1374,7 @@ async function runSearch(query){
   $('recent-list').style.display='none';
   $('favorites-list').style.display='none';
   $('history-list').style.display='none';
-  viewer.style.display='none';viewerToolbar.style.display='none';document.body.classList.remove('viewing-file','fullscreen-mode');
+  viewer.style.display='none';viewerToolbar.style.display='none';resetViewModes();
   searchResults.style.display='block';
   searchResults.innerHTML=`<div style="padding:40px;text-align:center"><div class="spinner" style="margin:0 auto"></div><div class="loading-text" style="margin-top:12px">検索中...</div></div>`;
 
